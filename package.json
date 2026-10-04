@@ -1,0 +1,63 @@
+{
+  "name": "vrchat-music-bridge",
+  "version": "0.1.0",
+  "description": "Route Spotify or YouTube Music through VoiceMeeter into your VRChat microphone — one app, verified setup.",
+  "main": "out/main/index.js",
+  "author": "VRChat Music Bridge",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "sidecar:build": "dotnet publish sidecar/AudioBridge.Sidecar.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o sidecar/publish",
+    "dist": "npm run build && npm run sidecar:build && electron-builder --win --x64",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "directories": {
+      "output": "release"
+    },
+    "appId": "dev.vcbridge.music",
+    "productName": "VRChat Music Bridge",
+    "files": [
+      "out/**",
+      "shared/**"
+    ],
+    "extraResources": [
+      {
+        "from": "sidecar/publish",
+        "to": "sidecar"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "VRChat-Music-Bridge-Setup-${version}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

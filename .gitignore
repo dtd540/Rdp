@@ -1,0 +1,21 @@
+# Node / Electron dependencies
+node_modules/
+
+# Generated Electron/Vite output and packaged installers
+out/
+dist/
+release/
+
+# .NET build/publish outputs
+sidecar/bin/
+sidecar/obj/
+sidecar/publish/
+
+# Local workspace metadata and logs
+.freebuff/
+vite-preview.log
+
+# Local environment files / credentials
+.env
+.env.*
+!.env.example
