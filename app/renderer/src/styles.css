@@ -549,6 +549,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .app-shell.nav-collapsed .sidebar-footer { display: none; }
 .app-shell.nav-collapsed .nav-item { justify-content: center; padding: 0; }
 .app-shell.nav-collapsed .nav-icon { font-size: 17px; }
+.app-shell.nav-collapsed .nav-icon svg { width: 18px; height: 18px; }
 .brand-lockup { display: flex; align-items: center; gap: 11px; padding: 0 10px 35px; }
 .brand-mark {
   display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px;
@@ -568,6 +569,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .nav-item.active:hover:not(:disabled) { color: #e8e1ff; background: linear-gradient(90deg, rgba(128, 91, 246, .19), rgba(128, 91, 246, .06)); border-color: rgba(151, 123, 255, .16); }
 .nav-item.active { color: #e8e1ff; background: linear-gradient(90deg, rgba(128, 91, 246, .19), rgba(128, 91, 246, .06)); border-color: rgba(151, 123, 255, .16); }
 .nav-icon { width: 17px; color: #8990a8; font-size: 16px; text-align: center; }
+.nav-icon svg { display: block; width: 17px; height: 17px; margin: 0 auto; }
 .nav-item.active .nav-icon { color: #b9a6ff; }
 .discord-panel { display: flex; flex-direction: column; height: 100%; min-height: 560px; }
 .discord-open-link { display: inline-flex; align-items: center; justify-content: center; flex: none; min-height: 30px; padding: 5px 11px; border: 1px solid rgba(133, 96, 255, .38); border-radius: 8px; color: #d9d1f7; background: rgba(31, 27, 50, .62); font-size: 10.5px; font-weight: 650; text-decoration: none; }
@@ -762,6 +764,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .brand-name, .sidebar-label, .nav-item > span:not(.nav-icon):not(.nav-dot), .sidebar-help, .sidebar-footer { display: none; }
   .nav-item { justify-content: center; padding: 0; }
   .nav-icon { font-size: 17px; }
+  .nav-icon svg { width: 18px; height: 18px; }
   .topbar { min-height: 54px; padding: 0 13px; }
   .health-chip { padding: 5px 7px; font-size: 0; }
   .health-chip i { width: 7px; height: 7px; }
