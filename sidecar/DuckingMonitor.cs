@@ -16,7 +16,6 @@ public sealed class DuckingMonitor : IDisposable
     private string? _endpointId;
     private long _lastLoudTick;
     private bool _ducked;
-    private long _lastEvalTick;
 
     public DuckingMonitor(VmConfig config) => _config = config;
 
@@ -97,15 +96,10 @@ public sealed class DuckingMonitor : IDisposable
     {
         if (!_config.DuckingEnabled) return;
 
-        // Evaluate at ~20 Hz max.
+        // One evaluation per capture buffer (~10 Hz for a 100 ms buffer). Shares
+        // the allocation-free peak scan used by the meters.
         var now = Environment.TickCount64;
-        if (now - _lastEvalTick < 50)
-        {
-            // still need loud-detection data on skipped frames; just skip eval
-        }
-        _lastEvalTick = now;
-
-        var peak = MeterServicePeak(buffer, bytesRecorded, fmt);
+        var peak = MeterService.PeakFromBuffer(buffer, bytesRecorded, fmt);
         var threshold = _config.DuckThresholdDb;
 
         if (peak > threshold)
@@ -122,36 +116,6 @@ public sealed class DuckingMonitor : IDisposable
             _ducked = false;
             _config.SetDucked(false);
         }
-    }
-
-    private static float MeterServicePeak(byte[] buffer, int bytesRecorded, WaveFormat fmt)
-    {
-        if (bytesRecorded <= 0) return -100f;
-        var bytesPerSample = fmt.BitsPerSample / 8;
-        if (bytesPerSample <= 0) return -100f;
-        var samples = bytesRecorded / bytesPerSample;
-        var peak = 0.0;
-        if (fmt.Encoding == WaveFormatEncoding.IeeeFloat)
-        {
-            var floats = new float[samples];
-            Buffer.BlockCopy(buffer, 0, floats, 0, samples * 4);
-            foreach (var f in floats) { var a = Math.Abs(f); if (a > peak) peak = a; }
-        }
-        else if (fmt.BitsPerSample == 16)
-        {
-            for (var i = 0; i + 1 < samples; i++)
-            {
-                var v = Math.Abs(BitConverter.ToInt16(buffer, i * 2)) / 32768.0;
-                if (v > peak) peak = v;
-            }
-        }
-        else if (fmt.BitsPerSample == 32)
-        {
-            var ints = new int[samples];
-            Buffer.BlockCopy(buffer, 0, ints, 0, samples * 4);
-            foreach (var i in ints) { var a = Math.Abs(i / (double)int.MaxValue); if (a > peak) peak = a; }
-        }
-        return peak <= 1e-7 ? -100f : (float)Math.Max(-100.0, 20.0 * Math.Log10(peak));
     }
 
     public void Stop()

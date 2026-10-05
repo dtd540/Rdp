@@ -90,7 +90,7 @@ public static class Program
     {
         "ping" => "pong",
 
-        "endpoints.list" => CoreAudio.ListEndpoints(),
+        "endpoints.list" => CoreAudio.ListEndpoints(Rpc.Param<bool?>(parms, "force") ?? false),
         "audio.scanSettings" => AudioScanSettings(),
 
         "sessions.list" => CoreAudio.ListSessions(Req(parms, "endpointId")),

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
@@ -58,7 +59,10 @@ public sealed class MeterService : IDisposable
             var stream = new Stream { Capture = capture, Running = true };
             capture.DataAvailable += (_, e) =>
             {
-                if (!stream.Running) return;
+                // Loopback can deliver audio buffers far faster than the 10 Hz
+                // meter refresh rate. Gate before scanning PCM so skipped frames
+                // cost only a short lock/clock read rather than a full buffer walk.
+                if (!stream.Running || !TryScheduleSample(endpointId)) return;
                 var peak = PeakFromBuffer(e.Buffer, e.BytesRecorded, capture.WaveFormat);
                 Emit(endpointId, peak);
             };
@@ -90,63 +94,77 @@ public sealed class MeterService : IDisposable
         lock (_gate)
         {
             if (_streams.Remove(endpointId, out var s)) s.Dispose();
+            _lastEmit.Remove(endpointId);
         }
     }
 
-    private static float PeakFromBuffer(byte[] buffer, int bytesRecorded, WaveFormat fmt)
+    /// <summary>
+    /// Peak of one captured buffer in dBFS. Reads the bytes in place — the
+    /// capture callback runs ~10x/sec per stream, so copying each buffer into a
+    /// freshly allocated array was the main source of GC pressure in the sidecar.
+    /// </summary>
+    internal static float PeakFromBuffer(byte[] buffer, int bytesRecorded, WaveFormat fmt)
     {
-        if (bytesRecorded <= 0) return -100f;
-        var bytesPerSample = fmt.BitsPerSample / 8;
+        if (buffer.Length == 0 || bytesRecorded <= 0) return -100f;
+        var bitsPerSample = fmt.BitsPerSample;
+        if (bitsPerSample <= 0) return -100f;
+        var bytesPerSample = bitsPerSample / 8;
         if (bytesPerSample <= 0) return -100f;
-        var channels = Math.Max(1, fmt.Channels);
-        var samples = bytesRecorded / bytesPerSample;
-        var peak = 0.0;
 
-        if (fmt.Encoding == WaveFormatEncoding.IeeeFloat)
+        // Only whole samples that actually fit in this buffer.
+        var usable = Math.Min(buffer.Length, bytesRecorded) / bytesPerSample * bytesPerSample;
+        float peak = 0f;
+
+        if (fmt.Encoding == WaveFormatEncoding.IeeeFloat && bitsPerSample == 32)
         {
-            var floats = new float[samples];
-            Buffer.BlockCopy(buffer, 0, floats, 0, samples * 4);
-            foreach (var f in floats)
+            foreach (var f in MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, usable)))
             {
                 var a = Math.Abs(f);
                 if (a > peak) peak = a;
             }
         }
-        else if (fmt.BitsPerSample == 16)
+        else if (bitsPerSample == 16)
         {
-            for (var i = 0; i + 1 < samples; i++)
+            foreach (var s in MemoryMarshal.Cast<byte, short>(buffer.AsSpan(0, usable)))
             {
-                var v = Math.Abs(BitConverter.ToInt16(buffer, i * 2)) / 32768.0;
-                if (v > peak) peak = v;
-            }
-        }
-        else if (fmt.BitsPerSample == 32)
-        {
-            var ints = new int[samples];
-            Buffer.BlockCopy(buffer, 0, ints, 0, samples * 4);
-            foreach (var i in ints)
-            {
-                var a = Math.Abs(i / (double)int.MaxValue);
+                var a = Math.Abs(s / 32768f);
                 if (a > peak) peak = a;
             }
         }
+        else if (bitsPerSample == 32)
+        {
+            foreach (var i in MemoryMarshal.Cast<byte, int>(buffer.AsSpan(0, usable)))
+            {
+                var a = Math.Abs(i / (float)int.MaxValue);
+                if (a > peak) peak = a;
+            }
+        }
+        else
+        {
+            return -100f;
+        }
 
-        _ = channels;
-        if (peak <= 0.0000001) return -100f;
-        return (float)Math.Max(-100.0, 20.0 * Math.Log10(peak));
+        if (peak <= 0.0000001f) return -100f;
+        return Math.Max(-100f, 20f * MathF.Log10(peak));
     }
 
     // Throttle per endpoint to ~10 Hz.
     private readonly Dictionary<string, long> _lastEmit = new(StringComparer.OrdinalIgnoreCase);
 
-    private void Emit(string endpointId, float peakDb)
+    private bool TryScheduleSample(string endpointId)
     {
         var now = Environment.TickCount64;
         lock (_gate)
         {
-            if (_lastEmit.TryGetValue(endpointId, out var last) && now - last < 100) return;
+            if (_lastEmit.TryGetValue(endpointId, out var last) && now - last < 100) return false;
             _lastEmit[endpointId] = now;
+            return true;
         }
+    }
+
+    private static void Emit(string endpointId, float peakDb)
+    {
+        var now = Environment.TickCount64;
         Rpc.EmitEvent("meter.update", new
         {
             endpointId,
@@ -161,6 +179,7 @@ public sealed class MeterService : IDisposable
         {
             foreach (var s in _streams.Values) s.Dispose();
             _streams.Clear();
+            _lastEmit.Clear();
         }
     }
 }

@@ -13,6 +13,7 @@ import {
   type VoiceMeeterRoutingState,
   type VoiceMeeterState
 } from '../bridge';
+import { useWindowVisible } from '../useWindowVisible';
 
 interface Props {
   state: AppState;
@@ -62,11 +63,13 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
 
   const [vrchatSession, setVrchatSession] = useState<boolean | null>(null);
   const [checkingVrchat, setCheckingVrchat] = useState(false);
+  const vrchatCheckInFlight = useRef(false);
 
   const musicEp = useMemo(() => pickMusicEndpoint(eps), [eps]);
   const vmOutput = useMemo(() => pickVmOutput(eps), [eps]);
   const mics = useMemo(() => pickMics(eps), [eps]);
   const activeMic = micName ?? mics.find((m) => m.isDefault)?.name ?? mics[0]?.name ?? null;
+  const windowVisible = useWindowVisible();
 
   const refreshEps = async () => setEps((await safeRpc<AudioEndpointInfo[]>('endpoints.list')) ?? []);
   const refreshVm = async () => setVm(await safeRpc<VoiceMeeterState>('vm.state'));
@@ -76,7 +79,7 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     try {
       const [snapshot, endpoints] = await Promise.all([
         safeRpc<AudioSettingsScan>('audio.scanSettings'),
-        safeRpc<AudioEndpointInfo[]>('endpoints.list')
+        safeRpc<AudioEndpointInfo[]>('endpoints.list', { force: true })
       ]);
       if (!snapshot) {
         setScanError('Could not read Windows audio settings. Refresh/restart the app and scan again before applying.');
@@ -100,18 +103,27 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
   };
 
   // Bootstrap: endpoints, VM state, self name. Poll VM until installed+running.
+  // Device enumeration is expensive, so it runs on its own slow cadence while
+  // the cheap VoiceMeeter probe stays frequent; nothing polls while hidden.
   useEffect(() => {
+    if (!windowVisible) return;
     void refreshEps();
     void refreshVm();
     void bridge.selfInfo().then((i) => setSelfName(i.name));
-    const id = window.setInterval(() => {
-      void refreshVm().then(() => void refreshEps());
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, []);
+    const idVm = window.setInterval(() => void refreshVm(), 3000);
+    const idEps = window.setInterval(() => void refreshEps(), 60000);
+    return () => {
+      window.clearInterval(idVm);
+      window.clearInterval(idEps);
+    };
+  }, [windowVisible]);
 
   // Meters: music endpoint + VoiceMeeter Output as soon as known; mic follows selection.
   const started = useRef<Set<string>>(new Set());
+  const stopAllMeters = () => {
+    for (const id of started.current) void safeRpc('meter.stop', { endpointId: id });
+    started.current.clear();
+  };
   const startMeter = async (id?: string) => {
     if (!id || started.current.has(id)) return;
     started.current.add(id);
@@ -122,14 +134,24 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     }
   };
   useEffect(() => {
+    if (!windowVisible) return;
     if (musicEp) void startMeter(musicEp.id);
     if (vmOutput) void startMeter(vmOutput.id);
-  }, [musicEp?.id, vmOutput?.id]);
+  }, [windowVisible, musicEp?.id, vmOutput?.id]);
 
   const activeMicEp = eps.find((e) => e.name === activeMic);
   useEffect(() => {
+    if (!windowVisible) return;
     if (activeMicEp) void startMeter(activeMicEp.id);
-  }, [activeMicEp?.id]);
+  }, [windowVisible, activeMicEp?.id]);
+
+  // Release the capture clients when this view goes away or the window is hidden:
+  // an open WASAPI client on the microphone is a real, ongoing audio cost.
+  useEffect(() => {
+    if (!windowVisible) stopAllMeters();
+  }, [windowVisible]);
+
+  useEffect(() => () => stopAllMeters(), []);
 
   const micPeak = activeMicEp ? peaks[activeMicEp.id] ?? null : null;
   const musicPeak = musicEp ? peaks[musicEp.id] ?? null : null;
@@ -256,20 +278,26 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
   };
 
   const checkVrchat = async () => {
-    if (!vmOutput) return;
+    if (!vmOutput || vrchatCheckInFlight.current) return;
+    vrchatCheckInFlight.current = true;
     setCheckingVrchat(true);
-    const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
-      endpointId: vmOutput.id,
-      processName: 'VRChat'
-    });
-    setVrchatSession(Boolean(s && s.pid > 0 && s.state === 'active'));
-    setCheckingVrchat(false);
+    try {
+      const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
+        endpointId: vmOutput.id,
+        processName: 'VRChat'
+      });
+      setVrchatSession(Boolean(s && s.pid > 0 && s.state === 'active'));
+    } finally {
+      vrchatCheckInFlight.current = false;
+      setCheckingVrchat(false);
+    }
   };
   useEffect(() => {
+    if (!windowVisible) return;
     if (vrchatSession === null) void checkVrchat();
-    const id = window.setInterval(() => void checkVrchat(), 5000);
+    const id = window.setInterval(() => void checkVrchat(), 15000);
     return () => window.clearInterval(id);
-  }, [vmOutput?.id]);
+  }, [windowVisible, vmOutput?.id]);
 
   const doFinish = async () => {
     await safeRpc('vm.setDucking', {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { bridge, isElectron, pickMusicEndpoint, pickMics, pickVmOutput, rpc, safeRpc, type AppState, type AudioEndpointInfo, type AudioSettingsScan, type VoiceMeeterRoutingState } from '../bridge';
 import { MeterBar } from './MeterBar';
+import { useWindowVisible } from '../useWindowVisible';
 
 interface Props {
   state: AppState;
@@ -60,6 +61,11 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   }, [selectedMic, micEp?.name]);
 
   const started = useRef<Set<string>>(new Set());
+  const windowVisible = useWindowVisible();
+  const stopAllMeters = () => {
+    for (const id of started.current) void safeRpc('meter.stop', { endpointId: id });
+    started.current.clear();
+  };
   const startMeter = async (id?: string) => {
     if (!id || started.current.has(id)) return;
     started.current.add(id);
@@ -76,7 +82,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
     try {
       const [snapshot, endpoints] = await Promise.all([
         safeRpc<AudioSettingsScan>('audio.scanSettings'),
-        safeRpc<AudioEndpointInfo[]>('endpoints.list')
+        safeRpc<AudioEndpointInfo[]>('endpoints.list', { force: true })
       ]);
       if (!snapshot) {
         setScanError('Could not read Windows audio settings. No routing changes were made.');
@@ -162,6 +168,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   };
 
   useEffect(() => {
+    if (!windowVisible) return;
     let stopped = false;
     void (async () => {
       const endpoints = (await safeRpc<AudioEndpointInfo[]>('endpoints.list')) ?? [];
@@ -183,56 +190,86 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
       }
     })();
     const id = window.setInterval(() => {
-      void safeRpc<AudioEndpointInfo[]>('endpoints.list').then((e) => e && setEps(e));
-    }, 6000);
+      void safeRpc<AudioEndpointInfo[]>('endpoints.list').then((e) => e && !stopped && setEps(e));
+    }, 60000);
     return () => {
       stopped = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [windowVisible]);
 
   useEffect(() => {
+    if (!windowVisible) return;
     if (musicEp) void startMeter(musicEp.id);
     if (vmOutput) void startMeter(vmOutput.id);
     if (micEp) void startMeter(micEp.id);
-  }, [musicEp?.id, vmOutput?.id, micEp?.id]);
+  }, [windowVisible, musicEp?.id, vmOutput?.id, micEp?.id]);
 
+  // Release the capture clients when this view goes away or the window is hidden:
+  // an open WASAPI client on the microphone is a real, ongoing audio cost.
+  useEffect(() => {
+    if (!windowVisible) stopAllMeters();
+  }, [windowVisible]);
+
+  useEffect(() => () => stopAllMeters(), []);
+
+  const liveCheckInFlight = useRef(false);
+  const vrchatCheckInFlight = useRef(false);
   const checkLive = async () => {
-    if (!musicEp) return;
-    const proc = tab === 'spotify' ? 'Spotify' : selfName;
-    const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
-      endpointId: musicEp.id,
-      processName: proc
-    });
-    const active = Boolean(s && s.pid > 0 && s.state === 'active');
-    setLiveSession(active);
-    // An active session on the selected VoiceMeeter virtual input confirms the
-    // application's audio has arrived at the mixer, even after navigating back
-    // to this screen and losing its transient route-button state.
-    if (active && configState === 'ready') {
-      setRouteOk(true);
-      setRouteDetail('Spotify audio session is active on the VoiceMeeter music input');
+    if (!musicEp || liveCheckInFlight.current) return;
+    liveCheckInFlight.current = true;
+    try {
+      const proc = tab === 'spotify' ? 'Spotify' : selfName;
+      const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
+        endpointId: musicEp.id,
+        processName: proc
+      });
+      const active = Boolean(s && s.pid > 0 && s.state === 'active');
+      setLiveSession(active);
+      // An active session on the selected VoiceMeeter virtual input confirms the
+      // application's audio has arrived at the mixer, even after navigating back
+      // to this screen and losing its transient route-button state.
+      if (active && configState === 'ready') {
+        setRouteOk(true);
+        setRouteDetail('Spotify audio session is active on the VoiceMeeter music input');
+      }
+    } finally {
+      liveCheckInFlight.current = false;
     }
   };
 
   const checkVrchat = async () => {
-    if (!vmOutput) return;
-    const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
-      endpointId: vmOutput.id,
-      processName: 'VRChat'
-    });
-    setVrchatOk(Boolean(s && s.pid > 0 && s.state === 'active'));
+    if (!vmOutput || vrchatCheckInFlight.current) return;
+    vrchatCheckInFlight.current = true;
+    try {
+      const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
+        endpointId: vmOutput.id,
+        processName: 'VRChat'
+      });
+      setVrchatOk(Boolean(s && s.pid > 0 && s.state === 'active'));
+    } finally {
+      vrchatCheckInFlight.current = false;
+    }
   };
 
+  // Session scans are the most expensive call we make (WASAPI session
+  // enumeration can take seconds on machines with many virtual devices), so poll
+  // on a slow cadence, never overlap a slow scan with the next tick, and stop
+  // entirely while the window is hidden.
+  const sessionsBusy = useRef(false);
   useEffect(() => {
-    void checkLive();
-    void checkVrchat();
-    const id = window.setInterval(() => {
-      void checkLive();
-      void checkVrchat();
-    }, 5000);
+    if (!windowVisible) return;
+    const poll = () => {
+      if (sessionsBusy.current) return;
+      sessionsBusy.current = true;
+      void Promise.all([checkLive(), checkVrchat()]).finally(() => {
+        sessionsBusy.current = false;
+      });
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 15000);
     return () => window.clearInterval(id);
-  }, [musicEp?.id, vmOutput?.id, tab, selfName]);
+  }, [windowVisible, musicEp?.id, vmOutput?.id, tab, selfName]);
 
   const doRoute = async () => {
     if (!musicEp) {

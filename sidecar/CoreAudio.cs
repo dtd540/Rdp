@@ -56,7 +56,7 @@ public static class CoreAudio
     /// <summary>Read-only snapshot of Windows defaults and active/inactive Spotify session routes.</summary>
     public static AudioSettingsScan ScanSettings()
     {
-        var endpoints = ListEndpoints();
+        var endpoints = ListEndpoints(force: true);
         AudioEndpointInfo? EndpointFor(DataFlow flow, Role role)
         {
             var endpoint = GetDefaultEndpoint(flow, role);
@@ -70,7 +70,7 @@ public static class CoreAudio
         {
             try
             {
-                foreach (var session in ListSessions(endpoint.Id).Where(s =>
+                foreach (var session in ListSessions(endpoint.Id, force: true).Where(s =>
                              string.Equals(s.ProcessName, "Spotify", StringComparison.OrdinalIgnoreCase)))
                     spotifySessions.Add(new AudioSessionRouteInfo(
                         session.Pid, session.ProcessName, endpoint.Id, endpoint.Name, session.State));
@@ -93,7 +93,35 @@ public static class CoreAudio
             spotifySessions);
     }
 
-    public static List<AudioEndpointInfo> ListEndpoints()
+    private static readonly object EndpointCacheGate = new();
+    private static List<AudioEndpointInfo>? _endpointCache;
+    private static long _endpointCacheTick;
+    private const long EndpointCacheTtlMs = 30000;
+
+    /// <summary>
+    /// Enumerating WASAPI endpoints costs seconds on machines with lots of virtual
+    /// audio devices, and the UI polls for the list every few seconds. Serve a
+    /// short-lived snapshot so overlapping polls collapse into a single
+    /// enumeration instead of stacking. Pass force:true for an explicit rescan.
+    /// </summary>
+    public static List<AudioEndpointInfo> ListEndpoints(bool force = false)
+    {
+        lock (EndpointCacheGate)
+        {
+            var now = Environment.TickCount64;
+            if (!force && _endpointCache is not null && now - _endpointCacheTick < EndpointCacheTtlMs)
+                return _endpointCache.ToList();
+
+            var fresh = EnumerateEndpoints();
+            _endpointCache = fresh;
+            // Start the TTL once enumeration completes, not before a possibly slow
+            // device scan; otherwise waiting callers can immediately re-enumerate.
+            _endpointCacheTick = Environment.TickCount64;
+            return fresh.ToList();
+        }
+    }
+
+    private static List<AudioEndpointInfo> EnumerateEndpoints()
     {
         using var enumerator = new MMDeviceEnumerator();
         var result = new List<AudioEndpointInfo>();
@@ -196,7 +224,26 @@ public static class CoreAudio
             (direction is null || e.Direction == direction) &&
             e.Name.Contains(fragment, StringComparison.OrdinalIgnoreCase));
 
-    public static List<AudioSessionInfo> ListSessions(string endpointId)
+    private sealed record SessionSnapshot(long Tick, List<AudioSessionInfo> Sessions);
+    private static readonly object SessionCacheGate = new();
+    private static readonly Dictionary<string, SessionSnapshot> SessionCache = new(StringComparer.OrdinalIgnoreCase);
+    private const long SessionCacheTtlMs = 2000;
+
+    public static List<AudioSessionInfo> ListSessions(string endpointId, bool force = false)
+    {
+        lock (SessionCacheGate)
+        {
+            var now = Environment.TickCount64;
+            if (!force && SessionCache.TryGetValue(endpointId, out var cached) && now - cached.Tick < SessionCacheTtlMs)
+                return cached.Sessions.ToList();
+
+            var sessions = EnumerateSessions(endpointId);
+            SessionCache[endpointId] = new SessionSnapshot(Environment.TickCount64, sessions);
+            return sessions.ToList();
+        }
+    }
+
+    private static List<AudioSessionInfo> EnumerateSessions(string endpointId)
     {
         using var enumerator = new MMDeviceEnumerator();
         using var dev = enumerator.GetDevice(endpointId);
@@ -205,6 +252,9 @@ public static class CoreAudio
         {
             mgr.RefreshSessions();
             var result = new List<AudioSessionInfo>();
+            // Resolve each unique process at most once per endpoint snapshot; several
+            // audio sessions commonly belong to the same application process.
+            var processNames = new Dictionary<int, string>();
             var sessions = mgr.Sessions;
             for (var i = 0; i < sessions.Count; i++)
             {
@@ -221,17 +271,23 @@ public static class CoreAudio
                         pid = -1;
                     }
 
-                    string procName = "system";
-                    if (pid > 0)
+                    string procName;
+                    if (pid <= 0)
+                    {
+                        procName = "system";
+                    }
+                    else if (!processNames.TryGetValue(pid, out procName!))
                     {
                         try
                         {
-                            procName = System.Diagnostics.Process.GetProcessById(pid).ProcessName;
+                            using var process = System.Diagnostics.Process.GetProcessById(pid);
+                            procName = process.ProcessName;
                         }
                         catch
                         {
                             procName = $"pid:{pid}";
                         }
+                        processNames[pid] = procName;
                     }
 
                     var state = s.State.ToString() switch
