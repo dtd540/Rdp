@@ -1,6 +1,6 @@
 {
   "name": "vrchat-music-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Route Spotify or YouTube Music through VoiceMeeter into your VRChat microphone — one app, verified setup.",
   "main": "out/main/index.js",
   "author": "VRChat Music Bridge",
