@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AppState } from '@shared/rpc';
+import type { UpdateStatus } from '@shared/update';
 
 export interface Unsub {
   (): void;
@@ -20,12 +21,23 @@ const bridge = {
   op: (op: string, arg?: string): Promise<{ ok: boolean; detail?: string; phase?: string }> =>
     ipcRenderer.invoke('bridge:op', op, arg),
 
-  /** Subscribe to sidecar events (meter.update, log, sidecar, …). Returns unsubscribe. */
+  updates: {
+    getStatus: (): Promise<UpdateStatus | null> => ipcRenderer.invoke('updates:getStatus'),
+    check: (): Promise<UpdateStatus> => ipcRenderer.invoke('updates:check'),
+    install: (): Promise<boolean> => ipcRenderer.invoke('updates:install')
+  },
+
+  /** Subscribe to sidecar and updater events (meter.update, updates:status, log, sidecar, …). */
   on: (cb: (method: string, params: unknown) => void): Unsub => {
     const listener = (_e: Electron.IpcRendererEvent, method: string, params: unknown) =>
       cb(method, params);
     ipcRenderer.on('bridge:event', listener);
-    return () => ipcRenderer.removeListener('bridge:event', listener);
+    const updateListener = (_e: Electron.IpcRendererEvent, status: UpdateStatus) => cb('updates:status', status);
+    ipcRenderer.on('updates:status', updateListener);
+    return () => {
+      ipcRenderer.removeListener('bridge:event', listener);
+      ipcRenderer.removeListener('updates:status', updateListener);
+    };
   }
 };
 

@@ -8,6 +8,9 @@ import type {
   VoiceMeeterRoutingState,
   VoiceMeeterState
 } from '@shared/rpc';
+import type { UpdateStatus } from '@shared/update';
+
+export type { UpdateStatus };
 
 export type {
   AppState,
@@ -27,6 +30,11 @@ export interface Bridge {
   selfInfo(): Promise<{ pid: number; name: string; isPackaged: boolean }>;
   op(op: string, arg?: string): Promise<{ ok: boolean; detail?: string; phase?: string }>;
   on(cb: (method: string, params: unknown) => void): () => void;
+  updates: {
+    getStatus(): Promise<UpdateStatus | null>;
+    check(): Promise<UpdateStatus>;
+    install(): Promise<boolean>;
+  };
 }
 
 declare global {
@@ -185,6 +193,11 @@ function createBrowserMock(): Bridge {
       return state;
     },
     selfInfo: async () => ({ pid: 0, name: 'browser-preview', isPackaged: false }),
+    updates: {
+      getStatus: async () => null,
+      check: async () => ({ state: 'error', message: 'Updates are only available in the installed Windows app.' }),
+      install: async () => false
+    },
     op: async (op, arg) => {
       if (op === 'openExternal' && arg) {
         try {

@@ -6,6 +6,10 @@
   "author": "VRChat Music Bridge",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dtd540/Rdp.git"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -14,6 +18,7 @@
     "test": "vitest run",
     "sidecar:build": "dotnet publish sidecar/AudioBridge.Sidecar.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o sidecar/publish",
     "dist": "npm run build && npm run sidecar:build && electron-builder --win --x64",
+    "release": "npm run build && npm run sidecar:build && electron-builder --win --x64 --publish always",
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
@@ -42,9 +47,19 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "dtd540",
+        "repo": "Rdp-releases",
+        "private": false,
+        "releaseType": "release"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

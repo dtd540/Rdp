@@ -278,36 +278,6 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
 
   return (
     <div className="dashboard-root">
-      <section className="page-hero dashboard-hero">
-        <div className="eyebrow"><span className="eyebrow-pulse" /> YOUR AUDIO ROUTE <span>·</span> LIVE MIXER</div>
-        <div className="hero-copy">
-          <div>
-            <h1>{tab === 'spotify' ? 'Music' : 'YouTube Music'} <em>in the mix.</em></h1>
-            <p>{tab === 'spotify' ? 'Spotify' : 'YouTube Music'} audio is routed through VoiceMeeter’s virtual microphone. Your voice stays in the mix—manage the levels and check the path below.</p>
-          </div>
-          <div className={`live-route-badge ${routeOk && liveSession && vrchatOk && vmPeak !== null && vmPeak > -55 ? 'is-connected' : ''}`}><i />              {routeOk && liveSession && vrchatOk && vmPeak !== null && vmPeak > -55 ? 'LOCAL SIGNAL PATH' : 'CHECKING ROUTE'}</div>
-        </div>
-        <div className="route-visual" aria-label="Live route from Spotify through VoiceMeeter to VRChat">
-          <div className={`route-node ${routeOk && liveSession ? 'route-node-live' : ''}`}>
-            <div className="route-node-icon spotify-icon">◉</div>
-            <div className="route-node-copy"><small>SOURCE</small><b>{tab === 'spotify' ? 'Spotify' : 'YouTube Music'}</b><span>{liveSession ? 'Audio session active' : 'Desktop app'}</span></div>
-            <span className={`route-node-status ${routeOk && liveSession ? 'status-live' : ''}`} />
-          </div>
-          <div className={`route-wire ${liveSession ? 'wire-live' : ''}`}><span /><span /><span /></div>
-          <div className={`route-node ${musicPeak !== null && musicPeak > -55 && routingState?.musicToB1 ? 'route-node-live' : ''}`}>
-            <div className="route-node-icon mixer-icon">▤</div>
-            <div className="route-node-copy"><small>MIXER</small><b>VoiceMeeter</b><span>{musicPeak !== null && musicPeak > -55 ? `Music signal · strip ${routingState?.musicStrip ?? '?'}` : 'Virtual audio'}</span></div>
-            <span className={`route-node-status ${musicPeak !== null && musicPeak > -55 ? 'status-live' : ''}`} />
-          </div>
-          <div className={`route-wire ${routingState?.musicToB1 && routingState?.b1Unmuted && vmPeak !== null && vmPeak > -55 ? 'wire-live' : ''}`}><span /><span /><span /></div>
-          <div className={`route-node ${vrchatOk && routingState?.musicToB1 && routingState?.b1Unmuted && vmPeak !== null && vmPeak > -55 ? 'route-node-live' : ''}`}>
-            <div className="route-node-icon vrchat-icon">◈</div>
-            <div className="route-node-copy"><small>VIRTUAL MIC</small><b>VRChat</b><span>{vrchatOk ? `Capture active · B1${routingState?.b1BusIndex !== undefined ? ` Bus[${routingState.b1BusIndex}]` : ''}` : 'VoiceMeeter Output'}</span></div>
-            <span className={`route-node-status ${vrchatOk && routingState?.musicToB1 && routingState?.b1Unmuted && vmPeak !== null && vmPeak > -55 ? 'status-live' : ''}`} />
-          </div>
-        </div>
-        <div className="route-footnote"><span className="route-footnote-icon">↗</span> Signal meters show local audio activity—not whether other players can hear you. Test with a friend in-world.</div>
-      </section>
       <div className="section-heading dashboard-section-heading"><div><span className="section-kicker">MONITOR YOUR CONNECTION</span><h2>Signal &amp; controls</h2></div></div>
       <div className="meters">
         <MeterBar label="♪ Music → VoiceMeeter input" peakDb={musicPeak} />

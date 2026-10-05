@@ -36,6 +36,62 @@ body {
   user-select: none;
 }
 
+/* Keep scrollbars in the app's dark violet palette instead of Chromium's white default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #39344f var(--bg2);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg2);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #39344f;
+  border: 2px solid var(--bg2);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--accent2);
+}
+
+*::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-button {
+  background: var(--bg2);
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
+@supports (scrollbar-color: auto) {
+  * {
+    scrollbar-color: #39344f var(--bg2);
+  }
+
+  *:hover {
+    scrollbar-color: var(--accent) var(--bg2);
+  }
+}
+
+@media (forced-colors: active) {
+  * {
+    scrollbar-color: auto;
+  }
+}
+
+/* ---- app shell ---- */
+
 .app {
   display: flex;
   flex-direction: column;
@@ -465,6 +521,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 
 .app-shell { display: flex; min-height: 100%; height: 100%; overflow: hidden; }
 .sidebar {
+  position: relative;
   width: 236px;
   flex: 0 0 236px;
   display: flex;
@@ -472,7 +529,27 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   padding: 25px 15px 16px;
   background: rgba(12, 14, 23, 0.94);
   border-right: 1px solid #202434;
+  transition: width .18s ease, flex-basis .18s ease, padding .18s ease;
 }
+.nav-toggle {
+  position: absolute; top: 50%; right: -11px; z-index: 3; transform: translateY(-50%);
+  display: grid; place-items: center; width: 22px; height: 36px; padding: 0;
+  border: 1px solid #2b3044; border-radius: 7px; color: #9aa1b8;
+  background: rgba(17, 20, 31, .97); font-size: 13px; line-height: 1; cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.nav-toggle:hover { color: #fff; border-color: var(--accent); background: rgba(70, 52, 124, .65); }
+/* Collapsed sidebar: icons only, matching the narrow-window rail. */
+.app-shell.nav-collapsed .sidebar { width: 62px; flex-basis: 62px; padding: 18px 8px 12px; }
+.app-shell.nav-collapsed .brand-lockup { justify-content: center; padding: 0 0 22px; }
+.app-shell.nav-collapsed .brand-name,
+.app-shell.nav-collapsed .sidebar-label,
+.app-shell.nav-collapsed .nav-item > span:not(.nav-icon):not(.nav-dot),
+.app-shell.nav-collapsed .nav-dot,
+.app-shell.nav-collapsed .sidebar-help,
+.app-shell.nav-collapsed .sidebar-footer { display: none; }
+.app-shell.nav-collapsed .nav-item { justify-content: center; padding: 0; }
+.app-shell.nav-collapsed .nav-icon { font-size: 17px; }
 .brand-lockup { display: flex; align-items: center; gap: 11px; padding: 0 10px 35px; }
 .brand-mark {
   display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px;
@@ -493,6 +570,28 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .nav-item.active { color: #e8e1ff; background: linear-gradient(90deg, rgba(128, 91, 246, .19), rgba(128, 91, 246, .06)); border-color: rgba(151, 123, 255, .16); }
 .nav-icon { width: 17px; color: #8990a8; font-size: 16px; text-align: center; }
 .nav-item.active .nav-icon { color: #b9a6ff; }
+.discord-panel { display: flex; flex-direction: column; height: 100%; min-height: 560px; }
+.discord-open-link { display: inline-flex; align-items: center; justify-content: center; flex: none; min-height: 30px; padding: 5px 11px; border: 1px solid rgba(133, 96, 255, .38); border-radius: 8px; color: #d9d1f7; background: rgba(31, 27, 50, .62); font-size: 10.5px; font-weight: 650; text-decoration: none; }
+.discord-open-link:hover { border-color: var(--accent); color: #fff; background: rgba(70, 52, 124, .55); }
+.discord-webview-frame { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid #292d40; border-radius: 11px; background: #0e1018; }
+.discord-webview { display: inline-flex; width: 100%; height: 100%; border: 0; background: #0e1018; }
+.discord-reload {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 1px solid rgba(133, 96, 255, .38); border-radius: 8px;
+  color: #cfc6f5; background: rgba(16, 18, 28, .82); font-size: 15px; line-height: 1;
+  opacity: .55; cursor: pointer; transition: opacity .15s ease, color .15s ease, border-color .15s ease;
+}
+.discord-webview-frame:hover .discord-reload { opacity: 1; }
+.discord-reload:hover:not(:disabled) { color: #fff; border-color: var(--accent); }
+.discord-reload:disabled { cursor: default; opacity: .4; }
+.discord-reload.is-reloading { animation: discord-reload-spin .9s linear infinite; }
+@keyframes discord-reload-spin { to { transform: rotate(360deg); } }
+.discord-preview-placeholder { display: flex; height: 100%; min-height: 390px; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 28px; text-align: center; }
+.discord-preview-icon { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 17px; color: white; background: #5865f2; font-size: 32px; font-weight: 800; }
+.discord-preview-placeholder h2 { margin: 5px 0 0; font-size: 19px; }
+.discord-preview-placeholder p { max-width: 420px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.discord-preview-placeholder .discord-open-link { margin-top: 5px; }
 .nav-dot { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--accent2); box-shadow: 0 0 10px rgba(181, 163, 255, .8); }
 .sidebar-spacer { flex: 1; min-height: 24px; }
 .sidebar-help { display: flex; gap: 10px; padding: 13px 11px; border: 1px solid #29263b; border-radius: 11px; background: linear-gradient(145deg, rgba(133, 96, 255, .1), rgba(17, 20, 33, .5)); }
@@ -516,6 +615,27 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .health-chip.is-ok i { background: var(--ok); box-shadow: 0 0 8px rgba(90, 224, 176, .64); }
 .health-chip.is-off i { background: var(--fail); }
 .content { width: 100%; max-width: 1120px; margin: 0 auto; padding: 28px 36px 56px; overflow-y: auto; }
+/* Discord view: hand the whole workspace to the embedded chat. */
+.content--immersive { max-width: none; display: flex; flex-direction: column; padding: 12px; overflow: hidden; }
+.content--immersive .update-control { margin-bottom: 10px; }
+.content--immersive .discord-panel { flex: 1; min-height: 0; }
+.content--immersive .discord-webview-frame { min-height: 0; }
+.update-control { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.update-check-button { color: #d9d1f7; border-color: rgba(133, 96, 255, .38); background: rgba(31, 27, 50, .62); }
+.update-check-button:hover:not(:disabled) { color: #fff; border-color: var(--accent); background: rgba(70, 52, 124, .55); }
+.update-check-button:disabled { opacity: .72; }
+.update-control-status { min-width: 0; overflow-wrap: anywhere; }
+.update-control-progress { width: 150px; height: 8px; accent-color: var(--accent); flex: none; }
+.update-control > button { flex: none; }
+.update-control > .primary { background: linear-gradient(135deg, #8c69ff, #7050e9); border-color: #9c80ff; }
+.update-control > .primary:hover:not(:disabled) { background: linear-gradient(135deg, #9a7cff, #8064f2); }
+.update-control-status[role='status'] { flex: 1; color: var(--muted); user-select: text; }
+.update-control:has(.update-check-button:disabled) .update-control-status { color: var(--accent2); }
+.update-control-status:has(+ .primary) { color: var(--ok); }
+@media (max-width: 700px) {
+  .update-control { align-items: flex-start; flex-direction: column; }
+  .update-control-progress { width: min(260px, 100%); }
+}
 
 .page-hero {
   position: relative; overflow: hidden; padding: 28px 29px 19px; margin-bottom: 31px;
@@ -587,8 +707,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 
 /* Common dashboard components in the same visual language */
 .dashboard-root .card { padding: 20px; }
-.mixer-config-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 19px; margin-bottom: 12px; border-color: #35304e; background: linear-gradient(110deg, rgba(30, 25, 49, .78), rgba(18, 21, 34, .98)); }
+.mixer-config-card { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px 19px; margin-bottom: 12px; border-color: #35304e; background: linear-gradient(110deg, rgba(30, 25, 49, .78), rgba(18, 21, 34, .98)); }
 .mixer-config-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.mixer-config-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.mixer-config-actions select { flex: 1 1 280px; min-width: min(260px, 100%); }
+.mixer-config-actions button { flex: none; }
 .mixer-config-copy .section-kicker { font-size: 8px; }
 .mixer-config-copy b { color: #eeedf7; font-size: 12px; }
 .mixer-config-copy > span:last-child { color: #9298ad; font-size: 10px; line-height: 1.5; }
@@ -608,8 +731,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .dashboard-root .yt-host { min-height: 360px; }
 .dashboard-root .row > button { min-height: 35px; }
 .dashboard-root .card .sub { font-size: 11px; }
-.dashboard-hero { margin-bottom: 25px; }
-.dashboard-hero .hero-copy { align-items: center; }
 .live-route-badge { display: inline-flex; flex: none; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #343044; border-radius: 8px; color: #a09bb2; background: rgba(14, 16, 26, .62); font-size: 8px; font-weight: 800; letter-spacing: .13em; }
 .live-route-badge i { width: 6px; height: 6px; border-radius: 50%; background: #ffc66d; }
 .live-route-badge.is-connected { border-color: rgba(90, 224, 176, .25); color: #8ce4c2; }
@@ -646,13 +767,15 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .health-chip { padding: 5px 7px; font-size: 0; }
   .health-chip i { width: 7px; height: 7px; }
   .content { padding: 16px 13px 32px; }
+  .content--immersive { overflow-y: auto; padding: 10px; }
+  .content--immersive .discord-webview-frame { min-height: 430px; }
+  .discord-panel { min-height: 520px; }
+  .discord-webview-frame { min-height: 390px; }
   .page-hero { padding: 20px 16px 15px; margin-bottom: 22px; }
   .hero-copy { padding: 17px 0; }
   .hero-copy h1 { font-size: 29px; }
   .hero-copy p { max-width: 420px; font-size: 11px; }
   .hero-badge { display: none; }
-  .live-route-badge { padding: 7px 8px; font-size: 0; }
-  .live-route-badge i { width: 8px; height: 8px; }
   .route-visual { grid-template-columns: 1fr; gap: 7px; }
   .route-node { padding: 7px 9px; }
   .route-node-icon { width: 27px; height: 27px; }
@@ -663,8 +786,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .card-step-number { top: 18px; left: 13px; }
   .finish-card { align-items: stretch; flex-direction: column; gap: 14px; }
   .finish-button { width: 100%; }
-  .mixer-config-card { align-items: stretch; flex-direction: column; }
-  .mixer-config-card > button { width: 100%; }
+  .mixer-config-card { align-items: stretch; }
+  .mixer-config-actions { align-items: stretch; flex-direction: column; }
+  .mixer-config-actions select, .mixer-config-actions button { width: 100%; }
   .meters { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {

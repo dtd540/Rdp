@@ -1,9 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 import { SidecarClient } from './sidecar';
 import { registerIpc } from './ipc';
 import { getState, setState } from './state';
 import { createTray, rebuildTray } from './tray';
+import { disposeUpdater } from './updater';
 
 // Keep audio in the browser process so OUR PID owns our audio sessions —
 // per-app routing (SetPersistedDefaultAudioEndpoint) keys on the session owner.
@@ -58,6 +59,41 @@ function createWindow(): void {
   } else {
     void win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   }
+
+  win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    const url = new URL(params.src || 'about:blank');
+    if (url.protocol !== 'https:' || url.hostname !== 'discord.com') {
+      event.preventDefault();
+      return;
+    }
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    webPreferences.webSecurity = true;
+    webPreferences.allowRunningInsecureContent = false;
+    webPreferences.preload = undefined;
+    webPreferences.partition = 'persist:discord';
+  });
+
+  win.webContents.on('did-attach-webview', (_event, contents) => {
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    const allowDiscordNavigation = (event: Electron.Event, url: string) => {
+      try {
+        const target = new URL(url);
+        if (target.protocol !== 'https:' || target.hostname !== 'discord.com') {
+          event.preventDefault();
+        }
+      } catch {
+        event.preventDefault();
+      }
+    };
+    contents.on('will-navigate', allowDiscordNavigation);
+    contents.on('will-redirect', allowDiscordNavigation);
+  });
+
+  session.fromPartition('persist:discord').setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
 
   win.on('closed', () => {
     win = null;
@@ -122,6 +158,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    disposeUpdater();
     sidecar.stop();
   });
 }

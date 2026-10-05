@@ -4,6 +4,7 @@ import type { AppState } from '@shared/rpc';
 import type { SidecarClient } from './sidecar';
 import { getState, setState } from './state';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
+import { checkForUpdates, getUpdateStatus, installDownloadedUpdate, initializeUpdater } from './updater';
 
 export interface IpcContext {
   sidecar: SidecarClient;
@@ -14,6 +15,11 @@ const ALLOWED_EXTERNAL = /^(https?:|spotify:)/i;
 
 export function registerIpc(ctx: IpcContext): void {
   const { sidecar } = ctx;
+
+  initializeUpdater(ctx.getWin);
+  ipcMain.handle('updates:getStatus', () => getUpdateStatus());
+  ipcMain.handle('updates:check', () => checkForUpdates());
+  ipcMain.handle('updates:install', () => installDownloadedUpdate());
 
   ipcMain.handle('bridge:call', async (_e, method: string, params?: Record<string, unknown>) => {
     // "self" routing: the renderer never knows PIDs; we stamp our own.
