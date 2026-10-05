@@ -32,7 +32,6 @@ body {
   color: var(--text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
