@@ -6,6 +6,7 @@ import type {
   BackgroundImage,
   BridgeOpResult,
   ServiceId,
+  SteamGame,
   VoiceMeeterConfigResult,
   VoiceMeeterRoutingState,
   VoiceMeeterState
@@ -22,6 +23,7 @@ export type {
   BackgroundImage,
   BridgeOpResult,
   ServiceId,
+  SteamGame,
   VoiceMeeterConfigResult,
   VoiceMeeterRoutingState,
   VoiceMeeterState

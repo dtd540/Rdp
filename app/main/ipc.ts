@@ -1,10 +1,12 @@
 import { ipcMain, shell, app, dialog, BrowserWindow } from 'electron';
+import { existsSync } from 'fs';
 import path from 'path';
 import type { AppState, BridgeOpResult } from '@shared/rpc';
 import type { OpenDialogOptions } from 'electron';
 import type { SidecarClient } from './sidecar';
 import { getState, setState } from './state';
 import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground } from './background';
+import { findSteamPath, launchUrl, scanSteamGames } from './steam';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
 import { checkForUpdates, getUpdateStatus, installDownloadedUpdate, initializeUpdater } from './updater';
 
@@ -13,7 +15,7 @@ export interface IpcContext {
   getWin: () => BrowserWindow | null;
 }
 
-const ALLOWED_EXTERNAL = /^(https?:|spotify:)/i;
+const ALLOWED_EXTERNAL = /^(https?:|spotify:|steam:)/i;
 
 export function registerIpc(ctx: IpcContext): void {
   const { sidecar } = ctx;
@@ -83,6 +85,31 @@ export function registerIpc(ctx: IpcContext): void {
       case 'clearBackground':
         setState({ backgroundPath: null });
         return { ok: true } satisfies BridgeOpResult;
+      case 'scanGames': {
+        const steamPath = await findSteamPath();
+        if (!steamPath) {
+          return { ok: false, detail: 'Steam was not found on this PC.' } satisfies BridgeOpResult;
+        }
+        return { ok: true, games: scanSteamGames(steamPath) } satisfies BridgeOpResult;
+      }
+      case 'launchGame': {
+        // Only a bare Steam app id, so a crafted argument cannot open something else.
+        if (!arg || !/^\d{1,12}$/.test(arg)) return { ok: false, detail: 'bad app id' } satisfies BridgeOpResult;
+        await shell.openExternal(launchUrl(arg));
+        return { ok: true } satisfies BridgeOpResult;
+      }
+      case 'openGameFolder': {
+        const root = await findSteamPath();
+        if (!root || !arg || !/^\d{1,12}$/.test(arg)) {
+          return { ok: false, detail: 'bad app id' } satisfies BridgeOpResult;
+        }
+        const game = scanSteamGames(root).find((g) => g.id === arg);
+        if (!game?.installDir || !existsSync(game.installDir)) {
+          return { ok: false, detail: 'Install folder not found on disk.' } satisfies BridgeOpResult;
+        }
+        await shell.openPath(game.installDir);
+        return { ok: true } satisfies BridgeOpResult;
+      }
       default:
         return { ok: false, detail: `unknown op ${op}` };
     }

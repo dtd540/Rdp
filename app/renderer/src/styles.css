@@ -814,6 +814,32 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .bg-actions { display: flex; flex: none; gap: 8px; }
 .bg-actions button { white-space: nowrap; }
 
+/* ---- games: local Steam library ---- */
+.games-root { min-width: 0; }
+.games-tools { display: flex; align-items: center; gap: 10px; }
+.games-sorts { margin: 0; }
+.games-sorts .tab { padding: 7px 13px; font-size: 11px; }
+.games-rescan { padding: 7px 14px; font-size: 11px; }
+.games-status { margin: 0 2px 12px; color: var(--muted); font-size: 11px; }
+.games-error { margin: 0 2px 12px; padding: 9px 12px; border: 1px solid rgba(255, 108, 137, .28); border-radius: 9px; background: rgba(255, 108, 137, .07); color: #eaa0b1; font-size: 11px; line-height: 1.5; user-select: text; }
+.games-summary { margin: 0 2px 14px; color: #7f859b; font-size: 10.5px; letter-spacing: .02em; }
+.games-summary b { color: #dfe1ec; font-weight: 700; }
+.games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; }
+.game-card {
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: linear-gradient(150deg, rgba(24, 27, 42, .96), rgba(17, 19, 30, .98));
+  transition: border-color .15s, transform .15s;
+}
+.game-card:hover { border-color: rgba(133, 96, 255, .4); transform: translateY(-1px); }
+.game-cover { position: relative; aspect-ratio: 460 / 215; overflow: hidden; background: #141726; }
+.game-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.game-copy { display: flex; flex: 1; flex-direction: column; gap: 5px; padding: 11px 13px 13px; }
+.game-copy b { overflow: hidden; font-size: 12.5px; line-height: 1.35; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.game-copy > span { color: var(--muted); font-size: 10px; }
+.game-actions { display: flex; gap: 7px; margin-top: auto; padding-top: 9px; }
+.game-actions button { padding: 6px 12px; font-size: 10.5px; }
+
 @media (max-width: 920px) {
   .sidebar { width: 196px; flex-basis: 196px; }
   .content { padding: 23px 22px 42px; }
@@ -861,6 +887,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .bg-row { flex-direction: column; align-items: stretch; }
   .bg-preview { width: 100%; height: 132px; }
   .bg-actions { flex-direction: column; }
+  .games-tools { flex-direction: column; align-items: stretch; }
+  .games-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }

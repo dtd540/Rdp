@@ -182,6 +182,28 @@ export interface BridgeOpResult {
   detail?: string;
   phase?: string;
   image?: BackgroundImage;
+  /** Set by the games ops. */
+  games?: SteamGame[];
+}
+
+// ---------- Games ----------
+
+/** One installed Steam title, read off this PC. */
+export interface SteamGame {
+  /** Steam app id, e.g. `431960`. */
+  id: string;
+  name: string;
+  /** Absolute install folder; empty when the manifest did not record one. */
+  installDir: string;
+  sizeOnDisk: number;
+  /** Unix seconds; 0 means never played. */
+  lastPlayed: number;
+  /** The library root this title was found under. */
+  libraryPath: string;
+  /** Wide store art. */
+  coverUrl: string;
+  /** Tall store art for the portrait column. */
+  coverTallUrl: string;
 }
 
 // ---------- Methods (main -> sidecar) ----------
