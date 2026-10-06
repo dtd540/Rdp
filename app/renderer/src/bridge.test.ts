@@ -106,4 +106,21 @@ describe('browser mock bridge (preview mode)', () => {
     expect(events[0].endpointId).toContain('{');
     expect(events[0].peakDb).toBeLessThanOrEqual(-3);
   });
+
+  it('reports no app background until one is picked', async () => {
+    const cleared = await bridge.op('clearBackground');
+    expect(cleared.ok).toBe(true);
+    const read = await bridge.op('getBackground');
+    expect(read.ok).toBe(true);
+    expect(read.image).toBeUndefined();
+    expect((await bridge.getState()).backgroundPath).toBeNull();
+  });
+
+  it('says the preview cannot open a native file dialog instead of throwing', async () => {
+    // No DOM in the test env, which is the same guard the preview falls back on.
+    const picked = await bridge.op('pickBackgroundImage');
+    expect(picked.ok).toBe(false);
+    expect(picked.detail).toMatch(/desktop app/i);
+    expect(picked.image).toBeUndefined();
+  });
 });

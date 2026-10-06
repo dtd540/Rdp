@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppState } from '@shared/rpc';
+import type { AppState, BridgeOpResult } from '@shared/rpc';
 import type { UpdateStatus } from '@shared/update';
 
 export interface Unsub {
@@ -18,7 +18,7 @@ const bridge = {
   selfInfo: (): Promise<{ pid: number; name: string; isPackaged: boolean }> =>
     ipcRenderer.invoke('bridge:selfInfo'),
 
-  op: (op: string, arg?: string): Promise<{ ok: boolean; detail?: string; phase?: string }> =>
+  op: (op: string, arg?: string): Promise<BridgeOpResult> =>
     ipcRenderer.invoke('bridge:op', op, arg),
 
   updates: {

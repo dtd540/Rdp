@@ -45,6 +45,19 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#0f0e14',
     autoHideMenuBar: true,
+    // Drop the stock Windows title bar and let the app's own topbar act as the
+    // title bar. On Windows the native min/max/close buttons are re-exposed as an
+    // overlay so we keep OS-standard window behaviour (snap layouts, aero shake).
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: {
+            color: '#0c0e17',
+            symbolColor: '#9aa1b8',
+            height: 61
+          }
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'index.js'),
       contextIsolation: true,

@@ -21,6 +21,7 @@ VRChat + game audio stay on your normal speakers → no feedback loop.
 - **YouTube Music** plays in an embedded window inside the app whose audio output is pointed straight at the VoiceMeeter music strip — so only this app's audio reaches VRChat.
 - **Verification**: live meters on the mic, music input and VoiceMeeter Output; session checks confirm Spotify is on the selected input and VRChat is capturing VoiceMeeter Output.
 - **Tray controls**: music volume, *send music to VRChat mic* mute toggle, and voice ducking (music drops 12 dB while you talk).
+- **App background**: Settings → App background paints any picture or animated GIF from this PC behind the app (PNG, JPG, WEBP, BMP, AVIF, GIF; under 25 MB). The file is referenced in place — it is never copied or uploaded — so moving or deleting it just tells you to pick it again, and *Remove* restores the default dark theme.
 - **Updates**: the installed Windows app periodically checks the public `dtd540/Rdp-releases` GitHub Releases feed, downloads compatible NSIS updates, and offers a **Restart to update** button. It never embeds a GitHub token. Source stays in the private `dtd540/Rdp` repository.
 
 ## Requirements

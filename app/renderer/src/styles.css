@@ -605,7 +605,26 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; overflow: hidden; }
 .topbar {
   min-height: 61px; display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  padding: 0 35px; background: rgba(12, 14, 23, .62); border-bottom: 1px solid rgba(37, 42, 58, .78);
+  background: rgba(12, 14, 23, .62); border-bottom: 1px solid rgba(37, 42, 58, .78);
+  /* The native title bar is hidden, so this strip doubles as the window drag handle. */
+  -webkit-app-region: drag;
+  padding-left: 35px;
+  padding-right: 35px;
+}
+/* Only the Windows build overlays native min/max/close on this strip, so only there do
+   we inset the right gutter. env() measures the window, not this element, and the topbar
+   already ends at the window edge — so reserve the controls' width, nothing more.
+   (In a plain browser env() resolves to 0 and this rule is skipped entirely.) */
+.titlebar-overlay .topbar {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 35px);
+}
+/* Interactive children must stay clickable — a drag region swallows clicks. */
+.topbar button,
+.topbar a,
+.topbar input,
+.topbar select,
+.topbar label {
+  -webkit-app-region: no-drag;
 }
 .topbar-context { display: flex; align-items: center; gap: 10px; color: #71788f; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
 .topbar-context b { color: #dfe1ec; font-size: 11px; letter-spacing: .01em; }
@@ -748,6 +767,53 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .step { border-radius: 8px; }
 .pill { padding: 4px 9px; }
 
+/* ---- custom app background (Settings > App background) ---- */
+.app-bg {
+  position: fixed; inset: 0; z-index: -1;
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+}
+/* Scrim: keeps the dark UI legible over any photo, bright ones included. */
+.app-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9, 10, 18, .58), rgba(9, 10, 18, .78)); }
+/* With a picture behind it, the panels go translucent so it actually reads through. */
+.has-bg .sidebar { background: rgba(12, 14, 23, .8); }
+.has-bg .topbar { background: rgba(12, 14, 23, .46); }
+.has-bg .card { background: rgba(18, 21, 34, .86); }
+.has-bg .setup-card { background: linear-gradient(140deg, rgba(20, 23, 36, .93), rgba(17, 19, 30, .93)); }
+.has-bg .page-hero {
+  background:
+    radial-gradient(ellipse at 82% 5%, rgba(135, 99, 255, .21), transparent 43%),
+    linear-gradient(124deg, rgba(23, 24, 42, .86) 0%, rgba(20, 21, 36, .86) 53%, rgba(18, 23, 37, .86) 100%);
+}
+.has-bg .route-visual { background: rgba(8, 10, 18, .36); }
+.has-bg .route-node { background: linear-gradient(140deg, rgba(27, 29, 46, .86), rgba(18, 21, 33, .86)); }
+.has-bg .hero-badge { background: rgba(17, 18, 33, .5); }
+.has-bg .mixer-config-card { background: linear-gradient(110deg, rgba(30, 25, 49, .7), rgba(18, 21, 34, .88)); }
+.has-bg .finish-card { background: linear-gradient(100deg, rgba(31, 26, 53, .8), rgba(18, 21, 34, .9)); }
+.has-bg .meter { background: linear-gradient(145deg, rgba(21, 24, 39, .86), rgba(17, 20, 31, .86)); }
+.has-bg .yt-placeholder { background: linear-gradient(160deg, rgba(22, 21, 29, .88), rgba(11, 10, 16, .92)); }
+.has-bg .yt-host { background: rgba(0, 0, 0, .72); }
+.has-bg .live-route-badge { background: rgba(14, 16, 26, .5); }
+
+/* ---- settings: app background ---- */
+.bg-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.bg-preview {
+  flex: none; display: grid; place-items: center; width: 168px; height: 100px; overflow: hidden;
+  border: 1px dashed #333a52; border-radius: 10px;
+  background: linear-gradient(150deg, #141726, #0d0f1a);
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  color: #6b7288; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+}
+.bg-preview.has-image { border-style: solid; border-color: #3a4160; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); }
+.bg-preview > span { padding: 0 8px; text-align: center; }
+.bg-copy { display: flex; flex: 1 1 250px; flex-direction: column; gap: 5px; min-width: 0; }
+.bg-copy b { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.bg-copy > span { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.bg-copy .bg-path { overflow: hidden; color: #6d738c; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.bg-badge { flex: none; padding: 2px 8px; color: #c3b4ff; border-color: rgba(133, 96, 255, .34); background: rgba(133, 96, 255, .14); font-size: 8.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.bg-note { margin: 2px 0 0; padding: 8px 10px; border: 1px solid rgba(255, 198, 109, .22); border-radius: 8px; background: rgba(255, 198, 109, .06); color: #dcbe82; font-size: 10.5px; line-height: 1.5; user-select: text; }
+.bg-actions { display: flex; flex: none; gap: 8px; }
+.bg-actions button { white-space: nowrap; }
+
 @media (max-width: 920px) {
   .sidebar { width: 196px; flex-basis: 196px; }
   .content { padding: 23px 22px 42px; }
@@ -792,6 +858,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .mixer-config-actions { align-items: stretch; flex-direction: column; }
   .mixer-config-actions select, .mixer-config-actions button { width: 100%; }
   .meters { grid-template-columns: 1fr; }
+  .bg-row { flex-direction: column; align-items: stretch; }
+  .bg-preview { width: 100%; height: 132px; }
+  .bg-actions { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }

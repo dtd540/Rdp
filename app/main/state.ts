@@ -11,7 +11,8 @@ const DEFAULT_STATE: AppState = {
   musicVolumeDb: 0,
   duckingEnabled: true,
   micEndpointName: null,
-  musicEndpointName: null
+  musicEndpointName: null,
+  backgroundPath: null
 };
 
 let cache: AppState | null = null;

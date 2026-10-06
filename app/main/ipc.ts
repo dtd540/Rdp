@@ -1,8 +1,10 @@
-import { ipcMain, shell, app, BrowserWindow } from 'electron';
+import { ipcMain, shell, app, dialog, BrowserWindow } from 'electron';
 import path from 'path';
-import type { AppState } from '@shared/rpc';
+import type { AppState, BridgeOpResult } from '@shared/rpc';
+import type { OpenDialogOptions } from 'electron';
 import type { SidecarClient } from './sidecar';
 import { getState, setState } from './state';
+import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground } from './background';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
 import { checkForUpdates, getUpdateStatus, installDownloadedUpdate, initializeUpdater } from './updater';
 
@@ -54,6 +56,33 @@ export function registerIpc(ctx: IpcContext): void {
       case 'resetSetup':
         setState({ setupComplete: false, activeService: null, musicEndpointName: null });
         return { ok: true };
+      case 'pickBackgroundImage': {
+        const options: OpenDialogOptions = {
+          title: 'Choose an app background',
+          buttonLabel: 'Use this background',
+          properties: ['openFile'],
+          filters: [{ name: 'Pictures', extensions: BACKGROUND_EXTENSIONS }]
+        };
+        const win = ctx.getWin();
+        const picked = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+        const chosen = picked.canceled ? undefined : picked.filePaths[0];
+        if (!chosen) return { ok: false, detail: 'cancelled' } satisfies BridgeOpResult;
+
+        const result = loadBackground(chosen);
+        if (!result.ok) return { ok: false, detail: result.detail, image: result.image } satisfies BridgeOpResult;
+        // Only remember a picture we can actually paint.
+        setState({ backgroundPath: result.image.path });
+        return { ok: true, detail: result.image.name, image: result.image } satisfies BridgeOpResult;
+      }
+      case 'getBackground': {
+        const result = loadStoredBackground(getState().backgroundPath);
+        if (!result) return { ok: true } satisfies BridgeOpResult;
+        if (result.ok) return { ok: true, image: result.image } satisfies BridgeOpResult;
+        return { ok: false, detail: result.detail, image: result.image } satisfies BridgeOpResult;
+      }
+      case 'clearBackground':
+        setState({ backgroundPath: null });
+        return { ok: true } satisfies BridgeOpResult;
       default:
         return { ok: false, detail: `unknown op ${op}` };
     }

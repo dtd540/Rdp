@@ -154,6 +154,34 @@ export interface AppState {
   micEndpointName: string | null;
   /** Friendly name of the VoiceMeeter virtual input music is routed to. */
   musicEndpointName: string | null;
+  /** Absolute path of the picture/GIF painted behind the app, null for the default dark theme. */
+  backgroundPath: string | null;
+}
+
+// ---------- Appearance ----------
+
+/** A user-chosen app background, resolved from `AppState.backgroundPath`. */
+export interface BackgroundImage {
+  /** Absolute path on this PC; empty when nothing is picked. */
+  path: string;
+  /** File name for display, e.g. `city-lights.gif`. */
+  name: string;
+  /** Data URL ready for CSS `background-image`; empty when `broken`. */
+  url: string;
+  /** True for animated GIFs, which the UI calls out. */
+  animated: boolean;
+  /** Set when the file moved, is unsupported, or is too large to read. */
+  broken?: boolean;
+  /** Why the background can't be shown, when `broken` is set. */
+  detail?: string;
+}
+
+/** Result of a `bridge:op` call. The background ops also hand back the image. */
+export interface BridgeOpResult {
+  ok: boolean;
+  detail?: string;
+  phase?: string;
+  image?: BackgroundImage;
 }
 
 // ---------- Methods (main -> sidecar) ----------

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
-import { bridge, isElectron, type AppState } from './bridge';
+import { bridge, isElectron, type AppState, type BackgroundImage } from './bridge';
 import packageInfo from '../../../package.json';
 import { Wizard } from './components/Wizard';
 import { Dashboard } from './components/Dashboard';
@@ -8,6 +8,15 @@ import { UpdateBanner } from './components/UpdateBanner';
 
 /** Minimal shape of the Electron <webview> tag we drive from React. */
 type DiscordWebview = HTMLElement & { reload: () => void };
+
+/**
+ * Full-window picture/GIF painted behind the shell. Sits at z-index -1 so the
+ * normal flow (sidebar, topbar, content) still stacks above it untouched.
+ */
+const BackgroundLayer: FC<{ url: string | null }> = ({ url }) => {
+  if (!url) return null;
+  return <div className="app-bg" style={{ backgroundImage: `url("${url}")` }} aria-hidden="true" />;
+};
 
 /** Official Discord mark, used for the Discord tab. */
 const DiscordMark: FC = () => (
@@ -86,6 +95,33 @@ export const App: FC = () => {
   const [peaks, setPeaks] = useState<Record<string, number>>({});
   const peaksRef = useRef(peaks);
   peaksRef.current = peaks;
+  const [bgInfo, setBgInfo] = useState<BackgroundImage | null>(null);
+  // A background that can't be painted (moved, unsupported) is reported, not shown.
+  const background = bgInfo && !bgInfo.broken && bgInfo.url ? bgInfo : null;
+
+  // Custom background comes from the main process (a data URL of the picked
+  // file), so re-read it whenever Settings changes the pick.
+  const refreshBackground = useMemo(
+    () => async () => {
+      try {
+        const result = await bridge.op('getBackground');
+        setBgInfo(result.image ?? null);
+      } catch {
+        setBgInfo(null);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    void refreshBackground();
+  }, [refreshBackground]);
+
+  // Panels turn translucent only while a background is up (see styles.css).
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-bg', Boolean(background));
+    return () => document.documentElement.classList.remove('has-bg');
+  }, [background]);
 
   // Load persisted state.
   useEffect(() => {
@@ -160,6 +196,7 @@ export const App: FC = () => {
   if (!state) {
     return (
       <div className="app">
+        <BackgroundLayer url={background?.url ?? null} />
         <div className="content">
           <div className="hint">Loading…</div>
         </div>
@@ -169,6 +206,7 @@ export const App: FC = () => {
 
   return (
     <div className={`app-shell ${navCollapsed ? 'nav-collapsed' : ''}`}>
+      <BackgroundLayer url={background?.url ?? null} />
       <aside className="sidebar">
         <button
           type="button"
@@ -232,7 +270,7 @@ export const App: FC = () => {
           ) : activeView === 'discord' ? (
             <DiscordPanel />
           ) : activeView === 'settings' ? (
-            <SettingsPanel />
+            <SettingsPanel background={bgInfo} refreshBackground={refreshBackground} />
           ) : (
             <Wizard state={state} setState={patchState} peaks={peaks} />
           )}

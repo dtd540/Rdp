@@ -3,6 +3,8 @@ import type {
   AudioEndpointInfo,
   AudioSessionInfo,
   AudioSettingsScan,
+  BackgroundImage,
+  BridgeOpResult,
   ServiceId,
   VoiceMeeterConfigResult,
   VoiceMeeterRoutingState,
@@ -17,6 +19,8 @@ export type {
   AudioEndpointInfo,
   AudioSessionInfo,
   AudioSettingsScan,
+  BackgroundImage,
+  BridgeOpResult,
   ServiceId,
   VoiceMeeterConfigResult,
   VoiceMeeterRoutingState,
@@ -28,7 +32,7 @@ export interface Bridge {
   getState(): Promise<AppState>;
   setState(patch: Partial<AppState>): Promise<AppState>;
   selfInfo(): Promise<{ pid: number; name: string; isPackaged: boolean }>;
-  op(op: string, arg?: string): Promise<{ ok: boolean; detail?: string; phase?: string }>;
+  op(op: string, arg?: string): Promise<BridgeOpResult>;
   on(cb: (method: string, params: unknown) => void): () => void;
   updates: {
     getStatus(): Promise<UpdateStatus | null>;
@@ -73,8 +77,67 @@ function createBrowserMock(): Bridge {
     musicVolumeDb: 0,
     duckingEnabled: true,
     micEndpointName: 'Microphone (USB Audio Device)',
-    musicEndpointName: 'VoiceMeeter Aux Input (VB-Audio VoiceMeeter VAIO AUX)'
+    musicEndpointName: 'VoiceMeeter Aux Input (VB-Audio VoiceMeeter VAIO AUX)',
+    backgroundPath: null
   };
+
+  // The preview can't open a native dialog, so it borrows a file input. Same
+  // outcome as the real picker: a data URL the UI can paint.
+  let mockBackground: BackgroundImage | null = null;
+
+  async function pickFileAsDataUrl(): Promise<{ name: string; url: string }> {
+    if (typeof document === 'undefined') {
+      throw new Error('File picking needs the desktop app — this browser preview cannot open a file dialog.');
+    }
+    return new Promise((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+
+      const finish = (): void => {
+        window.removeEventListener('focus', onRefocus);
+        input.remove();
+      };
+      // Backing out of the picker fires `cancel` in current Chromium, but older
+      // engines fire nothing at all — without this the caller would await forever.
+      const onRefocus = (): void => {
+        window.setTimeout(() => {
+          if (input.files?.length) return;
+          finish();
+          reject(new Error('cancelled'));
+        }, 250);
+      };
+
+      input.addEventListener(
+        'change',
+        () => {
+          const file = input.files?.[0];
+          finish();
+          if (!file) {
+            reject(new Error('cancelled'));
+            return;
+          }
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+          reader.onload = () =>
+            resolve({
+              name: file.name,
+              url: `${reader.result}`
+            });
+          reader.readAsDataURL(file);
+        },
+        { once: true }
+      );
+      input.addEventListener('cancel', () => {
+        finish();
+        reject(new Error('cancelled'));
+      }, { once: true });
+      window.addEventListener('focus', onRefocus, { once: true });
+      input.click();
+    });
+  }
 
   const listeners = new Set<(method: string, params: unknown) => void>();
   let meterTimer: ReturnType<typeof setInterval> | null = null;
@@ -205,6 +268,31 @@ function createBrowserMock(): Bridge {
         } catch {
           /* ignore */
         }
+      }
+      if (op === 'pickBackgroundImage') {
+        try {
+          const picked = await pickFileAsDataUrl();
+          mockBackground = {
+            path: `(preview) ${picked.name}`,
+            name: picked.name,
+            url: picked.url,
+            animated: /\.gif$/i.test(picked.name)
+          };
+          state = { ...state, backgroundPath: mockBackground.path };
+          return { ok: true, detail: mockBackground.name, image: mockBackground };
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          if (/cancelled/i.test(detail)) return { ok: false, detail: 'cancelled' };
+          return { ok: false, detail };
+        }
+      }
+      if (op === 'getBackground') {
+        return mockBackground ? { ok: true, image: mockBackground } : { ok: true };
+      }
+      if (op === 'clearBackground') {
+        mockBackground = null;
+        state = { ...state, backgroundPath: null };
+        return { ok: true };
       }
       return { ok: true, detail: `${op} (mock)` };
     },
