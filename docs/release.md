@@ -43,9 +43,9 @@ way a release silently produces nothing.
 ## What actually gets published
 
 - Source code: `dtd540/Rdp` (private)
-- The installer and update feed: `dtd540/Rdp-releases` — **private**. Only you and the
-  collaborators you add can download from it. Installed copies auto-update from it using
-  a `GH_TOKEN` set on the machine.
+- The installer and update feed: `dtd540/Rdp-releases` — **public as of this writing**,
+  so anyone can download a release and installed copies auto-update from it using no
+  credential. See *Updating from a private feed* to lock it down.
 
 Assets per release: `VRChat-Music-Bridge-Setup-<version>.exe`, its `.blockmap`, and
 `latest.yml`. `latest.yml` is the manifest the auto-updater reads, so it must always
