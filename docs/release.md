@@ -15,6 +15,20 @@ That command checks the tree is clean and you are on `main`, confirms the lockfi
 committed, runs typecheck and the test suite, bumps `package.json`, commits, creates the
 matching tag, and pushes both.
 
+## Publishing a version that is already committed
+
+`scripts/publish.mjs` *bumps* the version, so it is for the next release. If the version
+you want is already in `package.json` and simply has not been tagged yet, tag that commit
+directly — no bump needed:
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+The workflow's version check passes because the tag and `package.json` agree. Pushing the
+tag is the entire action; GitHub builds and publishes it. No token is needed on this PC.
+
 ## Why a tag, and not `npm run release` locally
 
 `.github/workflows/publish-release.yml` triggers on a `v*.*.*` tag and runs the whole
