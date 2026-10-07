@@ -53,7 +53,7 @@
         "provider": "github",
         "owner": "dtd540",
         "repo": "Rdp-releases",
-        "private": false,
+        "private": true,
         "releaseType": "release"
       }
     ]
