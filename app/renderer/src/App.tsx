@@ -5,10 +5,6 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { gamerStorageError, useGamerPreferences } from './gamerStore';
 import { TABS, type TabId } from './tabs';
 
-/**
- * Full-window picture/GIF painted behind the shell. Sits at z-index -1 so the
- * normal flow (sidebar, topbar, content) still stacks above it untouched.
- */
 const BackgroundLayer: FC<{ url: string | null }> = ({ url }) => {
   if (!url) return null;
   return <div className="app-bg" style={{ backgroundImage: `url("${url}")` }} aria-hidden="true" />;
@@ -27,11 +23,8 @@ export const App: FC = () => {
   const peaksRef = useRef(peaks);
   peaksRef.current = peaks;
   const [bgInfo, setBgInfo] = useState<BackgroundImage | null>(null);
-  // A background that can't be painted (moved, unsupported) is reported, not shown.
   const background = bgInfo && !bgInfo.broken && bgInfo.url ? bgInfo : null;
 
-  // Custom background comes from the main process (a data URL of the picked
-  // file), so re-read it whenever Settings changes the pick.
   const refreshBackground = useMemo(
     () => async () => {
       try {
@@ -63,13 +56,11 @@ export const App: FC = () => {
     return () => window.removeEventListener('keydown', key);
   }, []);
 
-  // Panels turn translucent only while a background is up (see styles.css).
   useEffect(() => {
     document.documentElement.classList.toggle('has-bg', Boolean(background));
     return () => document.documentElement.classList.remove('has-bg');
   }, [background]);
 
-  // Load persisted state.
   useEffect(() => {
     void bridge.getState().then((saved) => {
       setState(saved);
@@ -77,7 +68,6 @@ export const App: FC = () => {
     });
   }, []);
 
-  // Sidecar events: meters (throttled state writes), health.
   useEffect(() => {
     const flush = window.setTimeout(() => setPeaks({ ...peaksRef.current }), 120);
     const unsub = bridge.on((method, params) => {
@@ -95,7 +85,6 @@ export const App: FC = () => {
     };
   }, []);
 
-  // Meter flush loop: batch peak updates at ~8 fps for smooth bars.
   useEffect(() => {
     const id = window.setInterval(() => {
       setPeaks((prev) => {
@@ -106,7 +95,6 @@ export const App: FC = () => {
     return () => window.clearInterval(id);
   }, []);
 
-  // VoiceMeeter health poll (cheap; keeps the header pill honest).
   useEffect(() => {
     let stop = false;
     const tick = async () => {

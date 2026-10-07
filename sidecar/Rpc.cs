@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 
 namespace AudioBridge.Sidecar;
 
-/// <summary>Newline-delimited JSON-RPC framing shared with the Electron main process.</summary>
 public static class Rpc
 {
     public static readonly JsonSerializerOptions JsonOptions = new()
@@ -45,7 +44,6 @@ public static class Rpc
 
     private static readonly object OutLock = new();
 
-    /// <summary>Write one line to stdout. stdout carries ONLY RPC; logs go to stderr.</summary>
     public static void Write(object message)
     {
         var line = JsonSerializer.Serialize(message, message.GetType(), JsonOptions);

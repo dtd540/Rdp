@@ -3,9 +3,7 @@ import { saveGamerPreferences, useGamerPreferences } from '../gamerStore';
 import { bridge, type BackgroundImage } from '../bridge';
 
 export interface SettingsPanelProps {
-  /** Resolved background, or null when the default dark theme is in use. */
   background: BackgroundImage | null;
-  /** Re-read the persisted background from the main process. */
   refreshBackground: () => Promise<void>;
 }
 
@@ -24,11 +22,6 @@ function describe(background: BackgroundImage | null): { title: string; detail: 
   };
 }
 
-/**
- * Settings tab. Options live here as cards; each one reads from and writes back
- * to the persisted app state (see `AppState` in shared/rpc.ts), so anything
- * added survives a restart.
- */
 export const SettingsPanel: FC<SettingsPanelProps> = ({ background, refreshBackground }) => {
   const preferences = useGamerPreferences();
   const updatePreferences = (patch: Parameters<typeof saveGamerPreferences>[0]) => {
@@ -48,7 +41,6 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({ background, refreshBackg
         await refreshBackground();
         return;
       }
-      // A closed file dialog is a normal outcome, not something to report.
       if (result.detail && result.detail !== 'cancelled') setNote(result.detail);
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));

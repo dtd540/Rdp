@@ -4,14 +4,8 @@ using Microsoft.Win32;
 
 namespace AudioBridge.Sidecar;
 
-/// <summary>
-/// P/Invoke layer over VoicemeeterRemote64.dll (VoiceMeeter Remote API).
-/// DLL path discovery mirrors the well-known PathHelper approach:
-/// Program Files scan first, then the Uninstall registry key.
-/// </summary>
 public sealed class VoiceMeeterApi : IDisposable
 {
-    // --- raw imports (resolver binds them to the discovered DLL path) ---
 
     [DllImport("VoicemeeterRemote64.dll", EntryPoint = "VBVMR_Login", CharSet = CharSet.Ansi, ExactSpelling = true)]
     private static extern int VBVMR_Login();
@@ -55,8 +49,6 @@ public sealed class VoiceMeeterApi : IDisposable
     [DllImport("VoicemeeterRemote64.dll", EntryPoint = "VBVMR_Output_GetDeviceDescA", CharSet = CharSet.Ansi, ExactSpelling = true)]
     private static extern int VBVMR_Output_GetDeviceDescA(long index, ref int type, byte[] name, byte[] hardwareId);
 
-    // ---
-
     private static readonly object ResolverGate = new();
     private static string? _resolvedDll;
     private static bool _resolverInstalled;
@@ -92,7 +84,6 @@ public sealed class VoiceMeeterApi : IDisposable
             }
             catch
             {
-                // registry access quirks — ignore and try next
             }
         }
         return null;
@@ -119,7 +110,6 @@ public sealed class VoiceMeeterApi : IDisposable
     public static bool IsInstalled => DiscoverDll() is not null;
     public static string? DllPath => DiscoverDll();
 
-    /// <summary>Program folder (where Voicemeeter.exe lives), or null.</summary>
     public static string? ProgramFolder
     {
         get
@@ -132,7 +122,6 @@ public sealed class VoiceMeeterApi : IDisposable
     private readonly object _gate = new();
     private bool _loggedIn;
 
-    /// <summary>Login exactly once per sidecar lifetime (API returns -2 on re-login).</summary>
     private void EnsureLogin()
     {
         lock (_gate)
@@ -140,15 +129,13 @@ public sealed class VoiceMeeterApi : IDisposable
             if (_loggedIn) return;
             EnsureResolver();
             var rc = VBVMR_Login();
-            // 0 = OK, 1 = OK but engine/GUI not running (server appears later)
             if (rc == -1) throw new InvalidOperationException("VoiceMeeter API: cannot get client (unexpected)");
-            if (rc == -2) { _loggedIn = true; return; } // already logged in (shouldn't happen)
+            if (rc == -2) { _loggedIn = true; return; }
             if (rc < 0) throw new InvalidOperationException($"VoiceMeeter API login failed: {rc}");
             _loggedIn = true;
         }
     }
 
-    /// <summary>Engine running? (type probe succeeds only when the audio engine is up.)</summary>
     public bool TryGetKind(out int kind, out string kindName, out int version)
     {
         kind = 0; kindName = ""; version = 0;
@@ -171,7 +158,6 @@ public sealed class VoiceMeeterApi : IDisposable
         }
     }
 
-    /// <summary>Wait until the audio engine responds (after launch), up to timeoutMs.</summary>
     public bool WaitForEngine(int timeoutMs = 8000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -183,7 +169,6 @@ public sealed class VoiceMeeterApi : IDisposable
         return false;
     }
 
-    /// <summary>Launch the installed VoiceMeeter GUI (edition-correct: the exe in its folder).</summary>
     public void Launch()
     {
         EnsureLogin();
@@ -204,7 +189,6 @@ public sealed class VoiceMeeterApi : IDisposable
 
         if (!WaitForEngine())
         {
-            // Fall back to the API's own launcher (type 6 = Potato x64, 5 = Banana x64, 4 = Basic x64).
             foreach (var type in new long[] { 6, 5, 4 })
             {
                 try
@@ -213,7 +197,6 @@ public sealed class VoiceMeeterApi : IDisposable
                 }
                 catch
                 {
-                    // try next
                 }
             }
             throw new InvalidOperationException("VoiceMeeter did not start (engine not responding)");
@@ -365,7 +348,6 @@ public sealed class VoiceMeeterApi : IDisposable
         }
     }
 
-    /// <summary>Format version int (v1.v2.v3.v4 packed) as dotted string.</summary>
     public static string FormatVersion(int v) =>
         $"{(v >> 24) & 0xFF}.{(v >> 16) & 0xFF}.{(v >> 8) & 0xFF}.{v & 0xFF}";
 
@@ -374,13 +356,12 @@ public sealed class VoiceMeeterApi : IDisposable
         lock (_gate)
         {
             if (!_loggedIn) return;
-            try { VBVMR_Logout(); } catch { /* ignore */ }
+            try { VBVMR_Logout(); } catch { }
             _loggedIn = false;
         }
     }
 
     public void Dispose() => Logout();
 
-    // Suppress unused-warning for Assembly (kept for future version probing).
     private static readonly Assembly ThisAsm = typeof(VoiceMeeterApi).Assembly;
 }

@@ -1,7 +1,6 @@
 import { useRef, useState, type FC, type ReactNode } from 'react';
 import { bridge, hasNativeWebviews } from '../bridge';
 
-/** Official Discord mark, used for the Discord tab. */
 export const DiscordMark: FC = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path
@@ -11,7 +10,6 @@ export const DiscordMark: FC = () => (
   </svg>
 );
 
-/** Minimal shape of the Electron <webview> tag we drive from React. */
 type DiscordWebview = HTMLElement & { reload: () => void };
 
 export const DiscordPanel: FC = () => {
@@ -62,5 +60,4 @@ export const DiscordPanel: FC = () => {
   );
 };
 
-/** Placeholder so the registry can type icon slots without importing React types everywhere. */
 export type TabIcon = ReactNode;

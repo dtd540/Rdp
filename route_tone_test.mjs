@@ -1,5 +1,3 @@
-// Controlled experiment: does SetPersistedDefaultAudioEndpoint succeed when the
-// target process is *actively rendering audio* (our own tone generator)?
 import { spawn, execSync } from 'child_process';
 
 const exe = execSync(
@@ -46,11 +44,9 @@ render.forEach((e) => console.log(`  ${e.isDefault ? '[default] ' : '          '
 const target = render.length > 1 ? render.find((e) => !e.isDefault) ?? render[0] : render[0];
 console.log(`\nTarget: ${target.name}`);
 
-// 1) Without active audio session
 const before = await call('route.app', { pid: 0, endpointName: target.name });
 console.log('\nROUTE (idle, no audio):', JSON.stringify(before.result ?? before.error));
 
-// 2) Start tone -> our pid is now actively rendering
 const tone = await call('diag.playTone', { seconds: 20 });
 console.log('TONE:', JSON.stringify(tone.result ?? tone.error));
 await sleep(1200);

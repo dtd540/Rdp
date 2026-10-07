@@ -35,7 +35,6 @@ export interface GamerPreferences {
 
 export const WORLD_ID = /^wrld_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Accept official VRChat world / launch links and bare world ids only. */
 export function parseWorldLink(input: string): RecentWorld | null {
   const raw = input.trim();
   if (WORLD_ID.test(raw)) return { worldId: raw, name: raw };
@@ -79,7 +78,6 @@ export const DEFAULT_GAMER_PREFERENCES: GamerPreferences = {
   compactGames: false, reducedMotion: false, accent: 'violet'
 };
 
-/** Import/storage data is untrusted; normalise bounded, known fields only. */
 export function normaliseGamerPreferences(raw: unknown): GamerPreferences {
   const source = raw && typeof raw === 'object' ? raw as Partial<GamerPreferences> : {};
   const strings = (value: unknown, limit: number, length: number): string[] => Array.isArray(value)

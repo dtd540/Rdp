@@ -3,11 +3,6 @@ import { EventEmitter } from 'events';
 import { existsSync } from 'fs';
 import path from 'path';
 
-/**
- * Owns the AudioBridge.Sidecar process and speaks newline-delimited JSON-RPC to it.
- * Responses resolve pending promises by id; sidecar-initiated events re-emit as 'event'.
- * Lazy-restarts on call if the process died.
- */
 export class SidecarClient extends EventEmitter {
   private proc: ChildProcess | null = null;
   private buf = '';
@@ -27,11 +22,8 @@ export class SidecarClient extends EventEmitter {
     const candidates = process.env.VCB_SIDECAR_PATH
       ? [process.env.VCB_SIDECAR_PATH]
       : [
-          // packaged: resources/sidecar/
           path.join(process.resourcesPath ?? '', 'sidecar', exe),
-          // dev: repo/sidecar/bin/... (dotnet build)
           path.join(__dirname, '..', '..', '..', 'sidecar', 'bin', 'Release', 'net8.0-windows', exe),
-          // dev: dotnet publish -o sidecar/bin
           path.join(__dirname, '..', '..', '..', 'sidecar', 'bin', exe),
           path.join(process.cwd(), 'sidecar', 'bin', 'Release', 'net8.0-windows', exe),
           path.join(process.cwd(), 'sidecar', 'bin', exe)
@@ -87,7 +79,6 @@ export class SidecarClient extends EventEmitter {
         this.proc.stdin?.end();
         this.proc.kill();
       } catch {
-        /* ignore */
       }
       this.proc = null;
     }
@@ -144,7 +135,6 @@ export class SidecarClient extends EventEmitter {
           reject(err);
         }
       });
-      // Safety net: never hang the UI forever.
       const timer = setTimeout(() => {
         if (this.pending.delete(id)) {
           reject(new Error(`rpc timeout: ${method}`));
@@ -154,7 +144,6 @@ export class SidecarClient extends EventEmitter {
     });
   }
 
-  /** Best-effort call that never throws (returns null on failure). */
   async tryCall<T = unknown>(method: string, params?: unknown): Promise<T | null> {
     try {
       return await this.call<T>(method, params);

@@ -13,10 +13,6 @@ describe('local chatbox platform sources', () => {
     await expect(windowsChatboxSources({ windowTitle: true })).resolves.toEqual({ windowTitle: null, battery: null, media: null, receiveBytesPerSecond: null, sendBytesPerSecond: null });
   });
 
-  /* PowerShell writes an unassigned .NET return value to the success stream, so a call like
-     `$task.Wait(2500)` prepends "True" to stdout. That used to make the JSON.parse of the whole
-     stream throw, and the catch swallowed it, so enabling Media status silently reported every
-     integration as unavailable. Every value-returning call must discard or assign its result. */
   it('keeps the embedded PowerShell probe free of stray stdout output', () => {
     expect(script).not.toBe('');
     const leaks = script

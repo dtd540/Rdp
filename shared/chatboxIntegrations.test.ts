@@ -124,7 +124,7 @@ describe('Magic Chatbox integrations', () => {
     const rendered = composeChatIntegrations('', settings, values, { separator: 'newline', frame: 'none' });
     expect(rendered).toContain('🕐');
   });
-  it('normalises Nexus-style presentation preferences and supports custom frames and separators', () => {
+  it('normalises presentation preferences and supports custom frames and separators', () => {
     const settings = normaliseChatboxSettings({ lineSeparator: 'pipe', messageFrame: 'lines', frameTop: 'TOP', frameBottom: 'BOTTOM', borderStyle: 'stars', borderLeft: '«', borderRight: '»', integrationOptions: { timePrefix: true, timeZoneName: true, worldPrefixed: true, uptimePrefixed: true } });
     expect(settings.lineSeparator).toBe('pipe');
     expect(settings.messageFrame).toBe('lines');

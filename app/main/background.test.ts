@@ -11,7 +11,6 @@ import {
   type BackgroundResult
 } from './background';
 
-/** Smallest valid GIF: a 1x1 transparent pixel. */
 const TINY_GIF_BASE64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 let dir = '';
@@ -26,7 +25,6 @@ beforeAll(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'vcmb-bg-'));
 });
 
-/** Narrow a rejected background so its `detail` can be asserted. */
 function expectRejected(result: BackgroundResult): Extract<BackgroundResult, { ok: false }> {
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error('expected the background to be rejected');
@@ -87,7 +85,6 @@ describe('loadBackground', () => {
 
   it('refuses a background too large to hold in memory', () => {
     const file = makeFile('huge.gif', '');
-    // Sparse file: reports the big size without writing 25 MB to disk.
     truncateSync(file, MAX_BACKGROUND_BYTES + 1);
     expect(expectRejected(loadBackground(file)).detail).toContain('25 MB');
   });

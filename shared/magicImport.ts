@@ -10,14 +10,12 @@ function decodeXml(text: string): string {
     .replace(/&(amp|lt|gt|quot|apos);/g, (_, entity: string) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[entity] ?? '');
 }
 
-/** Parse only status records, never resolve entities or execute imported data. */
 export function importMagicStatuses(contents: string): { templates: ChatTemplate[]; skipped: number } {
   if (contents.length > 2 * 1024 * 1024) throw new Error('Status imports are limited to 2 MB.');
   const raw = contents.replace(/^\uFEFF/, '').trim();
   if (/<!DOCTYPE|<!ENTITY/i.test(raw)) throw new Error('XML entities and document types are not supported.');
   const records: Array<Record<string, unknown>> = [];
   if (raw.startsWith('<')) {
-    // MagicChatbox StatusList.xml records use StatusItem with msg/IsFavorite/UseInCycle.
     for (const match of raw.matchAll(/<(StatusItem|Status|ChatStatus|StatusModel)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi)) {
       const field = (names: string[]) => {
         for (const name of names) {

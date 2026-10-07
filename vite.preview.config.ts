@@ -2,8 +2,6 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
 
-// Dev-server config for the renderer alone: powers the browser live preview
-// (HMR) while the Electron/native side of the app keeps being built.
 export default defineConfig({
   root: resolve(__dirname, 'app/renderer'),
   plugins: [react()],

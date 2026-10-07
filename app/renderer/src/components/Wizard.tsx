@@ -13,6 +13,7 @@ import {
   type VoiceMeeterRoutingState,
   type VoiceMeeterState
 } from '../bridge';
+import { DEFAULT_MUSIC_BROWSER, MUSIC_BROWSERS, musicBrowser, musicTargetProcess } from '../musicBrowser';
 import { useWindowVisible } from '../useWindowVisible';
 
 interface Props {
@@ -55,17 +56,18 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
   const [installDetail, setInstallDetail] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
   const [service, setService] = useState<'spotify' | 'ytmusic'>('spotify');
+  const [browserId, setBrowserId] = useState(DEFAULT_MUSIC_BROWSER);
 
   const [routeResult, setRouteResult] = useState<{ ok: boolean; method: string; detail?: string } | null>(null);
   const [liveSession, setLiveSession] = useState<boolean | null>(null);
   const [verifying, setVerifying] = useState(false);
-  const [selfName, setSelfName] = useState('app');
 
   const [vrchatSession, setVrchatSession] = useState<boolean | null>(null);
   const [checkingVrchat, setCheckingVrchat] = useState(false);
   const vrchatCheckInFlight = useRef(false);
 
   const musicEp = useMemo(() => pickMusicEndpoint(eps), [eps]);
+  const musicSourceLabel = service === 'spotify' ? 'Spotify' : musicBrowser(browserId).label;
   const vmOutput = useMemo(() => pickVmOutput(eps), [eps]);
   const mics = useMemo(() => pickMics(eps), [eps]);
   const activeMic = micName ?? mics.find((m) => m.isDefault)?.name ?? mics[0]?.name ?? null;
@@ -102,14 +104,10 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     }
   };
 
-  // Bootstrap: endpoints, VM state, self name. Poll VM until installed+running.
-  // Device enumeration is expensive, so it runs on its own slow cadence while
-  // the cheap VoiceMeeter probe stays frequent; nothing polls while hidden.
   useEffect(() => {
     if (!windowVisible) return;
     void refreshEps();
     void refreshVm();
-    void bridge.selfInfo().then((i) => setSelfName(i.name));
     const idVm = window.setInterval(() => void refreshVm(), 3000);
     const idEps = window.setInterval(() => void refreshEps(), 60000);
     return () => {
@@ -118,7 +116,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     };
   }, [windowVisible]);
 
-  // Meters: music endpoint + VoiceMeeter Output as soon as known; mic follows selection.
   const started = useRef<Set<string>>(new Set());
   const stopAllMeters = () => {
     for (const id of started.current) void safeRpc('meter.stop', { endpointId: id });
@@ -145,8 +142,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     if (activeMicEp) void startMeter(activeMicEp.id);
   }, [windowVisible, activeMicEp?.id]);
 
-  // Release the capture clients when this view goes away or the window is hidden:
-  // an open WASAPI client on the microphone is a real, ongoing audio cost.
   useEffect(() => {
     if (!windowVisible) stopAllMeters();
   }, [windowVisible]);
@@ -175,7 +170,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     </div>
   );
 
-  // ---- actions ----
   const doInstall = async () => {
     setInstallDetail('working…');
     const r = await bridge.op('installVoiceMeeter');
@@ -199,7 +193,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     setApplying(true);
     setScanError(null);
     try {
-      // Re-scan immediately before applying, but never silently switch the chosen output.
       const previousScan = audioScan;
       const latestScan = await scanAudio();
       if (!latestScan) throw new Error('Audio scan failed; no routing changes were applied.');
@@ -246,10 +239,7 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     }
     setRouteResult(null);
     setLiveSession(null);
-    const params =
-      service === 'spotify'
-        ? { processName: 'Spotify', endpointName: musicEp.name }
-        : { self: true, endpointName: musicEp.name };
+    const params = { processName: musicTargetProcess(service, browserId), endpointName: musicEp.name };
     const r = await safeRpc<{ ok: boolean; method: string; detail?: string }>('route.app', params);
     setRouteResult(r ?? { ok: false, method: 'manual', detail: 'sidecar call failed' });
     if (service === 'ytmusic') await setState({ activeService: 'ytmusic' });
@@ -259,7 +249,7 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
     if (!musicEp) return;
     setVerifying(true);
     setLiveSession(null);
-    const procName = service === 'spotify' ? 'Spotify' : selfName;
+    const procName = musicTargetProcess(service, browserId);
     const deadline = Date.now() + 12000;
     while (Date.now() < deadline) {
       const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
@@ -317,9 +307,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
   const vrchatOk = vrchatSession === true;
   const musicLive = musicPeak !== null && musicPeak > -55;
 
-  // Do not call setup complete just because routing was configured. Require a live
-  // Spotify session on the VoiceMeeter input, actual signal on that input and on
-  // the VoiceMeeter virtual mic output, and an active VRChat capture session.
   const vmOutputLive = vmOutPeak !== null && vmOutPeak > -55;
   const canFinish =
     vmIsRunning && configOk && routeOk && liveSession === true && musicLive && vmOutputLive && vrchatOk;
@@ -359,7 +346,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
 
       <div className="section-heading"><div><span className="section-kicker">LET’S GET YOU CONNECTED</span><h2>Setup your audio route</h2></div><span className="setup-count">04 <i>/</i> STEPS</span></div>
 
-      {/* ---------- Step 1: VoiceMeeter ---------- */}
       <div className="card setup-card setup-card-engine">
         <div className="card-step-number">01</div>
         <h2>1 · VoiceMeeter audio mixer</h2>
@@ -398,7 +384,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
         {installDetail && vmInstalled ? <p className="hint">{installDetail}</p> : null}
       </div>
 
-      {/* ---------- Step 2: mic + routing config ---------- */}
       <div className="card setup-card" style={vmIsRunning ? undefined : { opacity: 0.5, pointerEvents: 'none' }}>
         <div className="card-step-number">02</div>
         <h2>2 · Your microphone &amp; routing</h2>
@@ -472,11 +457,10 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
         {musicEp ? bar(`Music entering ${musicEp.name}`, musicPeak) : null}
       </div>
 
-      {/* ---------- Step 3: service ---------- */}
       <div className="card setup-card">
         <div className="card-step-number">03</div>
         <h2>3 · Connect your music</h2>
-        <p className="sub">Connect Spotify to the virtual music input. You can set the route now; apply the VoiceMeeter mixer configuration above before testing playback.</p>
+        <p className="sub">Connect your music app to the virtual music input. You can set the route now; apply the VoiceMeeter mixer configuration above before testing playback.</p>
         <div className="tabs" role="tablist" aria-label="Choose music service">
           <button type="button" role="tab" aria-selected={service === 'spotify'} className={`tab ${service === 'spotify' ? 'active' : ''}`} onClick={() => setService('spotify')}>
             Spotify
@@ -487,13 +471,31 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
         </div>
 
         {!musicEp ? <div className="inline-notice">VoiceMeeter’s virtual input is not detected yet. You can still press Connect to see the next step; install or start VoiceMeeter, then refresh audio devices.</div> : null}
+        {service === 'ytmusic' ? (
+          <div className="row">
+            <label htmlFor="wizard-music-browser"><b>Browser playing YouTube Music</b></label>
+            <select
+              id="wizard-music-browser"
+              value={browserId}
+              onChange={(event) => {
+                setBrowserId(event.target.value);
+                setRouteResult(null);
+                setLiveSession(null);
+              }}
+            >
+              {MUSIC_BROWSERS.map((browser) => <option key={browser.id} value={browser.id}>{browser.label}</option>)}
+            </select>
+          </div>
+        ) : null}
         <div className="row">
           <button className="primary" onClick={() => void doRoute()}>
-            {routeOk ? 'Re-connect' : 'Connect'} {service === 'spotify' ? 'Spotify' : 'YouTube Music'}
+            {routeOk ? 'Re-connect' : 'Connect'} {musicSourceLabel}
           </button>
           {service === 'spotify' ? (
             <button onClick={() => void bridge.op('openExternal', 'spotify:')}>Open Spotify</button>
-          ) : null}
+          ) : (
+            <button onClick={() => void bridge.op('openExternal', 'https://music.youtube.com')}>Open YouTube Music</button>
+          )}
           {!musicEp ? <button className="small ghost" onClick={() => void refreshEps()}>Refresh audio devices</button> : null}
           {routeResult && !routeOk ? (
             <button onClick={() => void bridge.op('openSoundSettings')}>
@@ -514,9 +516,7 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
               detail={
                 routeResult.ok
                   ? routeResult.detail
-                  : `${routeResult.detail ?? ''} → Settings ▸ System ▸ Sound ▸ App volume and device preferences ▸ ${
-                      service === 'spotify' ? 'Spotify' : 'VRChat Music Bridge'
-                    } output = ${musicEp?.name ?? 'VoiceMeeter Aux Input'}`
+                  : `${routeResult.detail ?? ''} → Settings ▸ System ▸ Sound ▸ App volume and device preferences ▸ ${musicSourceLabel} output = ${musicEp?.name ?? 'VoiceMeeter Aux Input'}`
               }
             />
           ) : null}
@@ -545,14 +545,13 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
           </p>
         ) : null}
         {musicEp && routeOk && !musicLive ? (
-          <p className="inline-notice">Spotify is assigned to VoiceMeeter, but there is no signal on its virtual input yet. Start a track; if it remains silent, open Windows sound settings and confirm Spotify’s output is VoiceMeeter Aux Input.</p>
+          <p className="inline-notice">{musicSourceLabel} is assigned to VoiceMeeter, but there is no signal on its virtual input yet. Start a track; if it remains silent, open Windows sound settings and confirm its output is VoiceMeeter Aux Input.</p>
         ) : null}
         {routeOk && musicLive && routingState?.running && !routingState.musicToB1 ? (
-          <p className="inline-notice">Spotify reaches VoiceMeeter, but its music strip is not assigned to B1 (the VRChat virtual mic bus). Press Apply routing in step 2 and verify this status turns on.</p>
+          <p className="inline-notice">{musicSourceLabel} reaches VoiceMeeter, but its music strip is not assigned to B1 (the VRChat virtual mic bus). Press Apply routing in step 2 and verify this status turns on.</p>
         ) : null}
       </div>
 
-      {/* ---------- Step 4: VRChat ---------- */}
       <div className="card setup-card" style={configOk ? undefined : { opacity: 0.5, pointerEvents: 'none' }}>
         <div className="card-step-number">04</div>
         <h2>4 · VRChat microphone</h2>
@@ -588,7 +587,6 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
         )}
       </div>
 
-      {/* ---------- Finish ---------- */}
       <div className="card finish-card">
         <div className="finish-card-copy"><span className="section-kicker">READY WHEN YOU ARE</span><b>Test the complete path</b><span>Play Spotify, confirm both meters, and make sure VRChat is actively capturing the virtual mic.</span></div>
         <div className="row">

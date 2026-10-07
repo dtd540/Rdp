@@ -28,7 +28,6 @@ export function typingPacket(typing: boolean): Buffer {
   return Buffer.concat([oscString('/chatbox/typing'), oscString(typing ? ',T' : ',F')]);
 }
 
-/** A reusable sender with an injectable transport for byte-level/integration testing. */
 export class ChatboxSender {
   private lastChatAt = -Infinity;
   private lastTypingAt = -Infinity;
@@ -44,7 +43,6 @@ export class ChatboxSender {
     const port = localOscPort(request.port);
     const text = request.clear === true ? '' : validateChatText(request.text);
     if (this.clock() - this.lastChatAt < CHATBOX_INTERVAL_MS) throw new Error('Wait 1.5 seconds between chatbox messages.');
-    // Record before awaiting so concurrent callers cannot bypass the rate limit.
     this.lastChatAt = this.clock();
     await this.transmit(chatboxPacket(text, request.clear ? false : request.sound === true, request.send !== false), port);
   }
@@ -60,7 +58,6 @@ export class ChatboxSender {
   }
 }
 
-/** No arbitrary destination, no OSC listeners, and no unused sockets left open. */
 export function sendLocalPacket(packet: Buffer, port: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket = createSocket('udp4');

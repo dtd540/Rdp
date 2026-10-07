@@ -4,11 +4,6 @@ using NAudio.Wave;
 
 namespace AudioBridge.Sidecar;
 
-/// <summary>
-/// Live peak meters. Render endpoints use WASAPI loopback; capture endpoints
-/// (mic, "VoiceMeeter Output") are opened as normal capture clients.
-/// Emits <c>meter.update</c> events at ~10 Hz per endpoint.
-/// </summary>
 public sealed class MeterService : IDisposable
 {
     private sealed class Stream : IDisposable
@@ -18,8 +13,8 @@ public sealed class MeterService : IDisposable
         public void Dispose()
         {
             Running = false;
-            try { Capture?.StopRecording(); } catch { /* ignore */ }
-            try { Capture?.Dispose(); } catch { /* ignore */ }
+            try { Capture?.StopRecording(); } catch { }
+            try { Capture?.Dispose(); } catch { }
         }
     }
 
@@ -59,18 +54,14 @@ public sealed class MeterService : IDisposable
             var stream = new Stream { Capture = capture, Running = true };
             capture.DataAvailable += (_, e) =>
             {
-                // Loopback can deliver audio buffers far faster than the 10 Hz
-                // meter refresh rate. Gate before scanning PCM so skipped frames
-                // cost only a short lock/clock read rather than a full buffer walk.
                 if (!stream.Running || !TryScheduleSample(endpointId)) return;
                 var peak = PeakFromBuffer(e.Buffer, e.BytesRecorded, capture.WaveFormat);
                 Emit(endpointId, peak);
             };
             capture.RecordingStopped += (_, _) =>
             {
-                // Device unplugged / engine restart: drop the stream so it can be restarted.
                 lock (_gate) { _streams.Remove(endpointId); }
-                try { capture.Dispose(); } catch { /* ignore */ }
+                try { capture.Dispose(); } catch { }
             };
 
             try
@@ -98,11 +89,6 @@ public sealed class MeterService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Peak of one captured buffer in dBFS. Reads the bytes in place — the
-    /// capture callback runs ~10x/sec per stream, so copying each buffer into a
-    /// freshly allocated array was the main source of GC pressure in the sidecar.
-    /// </summary>
     internal static float PeakFromBuffer(byte[] buffer, int bytesRecorded, WaveFormat fmt)
     {
         if (buffer.Length == 0 || bytesRecorded <= 0) return -100f;
@@ -111,7 +97,6 @@ public sealed class MeterService : IDisposable
         var bytesPerSample = bitsPerSample / 8;
         if (bytesPerSample <= 0) return -100f;
 
-        // Only whole samples that actually fit in this buffer.
         var usable = Math.Min(buffer.Length, bytesRecorded) / bytesPerSample * bytesPerSample;
         float peak = 0f;
 
@@ -148,7 +133,6 @@ public sealed class MeterService : IDisposable
         return Math.Max(-100f, 20f * MathF.Log10(peak));
     }
 
-    // Throttle per endpoint to ~10 Hz.
     private readonly Dictionary<string, long> _lastEmit = new(StringComparer.OrdinalIgnoreCase);
 
     private bool TryScheduleSample(string endpointId)

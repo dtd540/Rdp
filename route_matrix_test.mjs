@@ -1,7 +1,3 @@
-// Diagnostic matrix for SetPersistedDefaultAudioEndpoint:
-//   foreign-active pid -> VAC (real change), then restore to default
-//   foreign-idle   pid -> default (no disruption)
-//   second sidecar playing a tone -> VAC, then restore
 import { spawn, execSync } from 'child_process';
 
 const exe = execSync('find sidecar/bin -name AudioBridge.Sidecar.exe', { encoding: 'utf8' }).trim().split('\n')[0];
@@ -44,7 +40,6 @@ const render = eps.filter((e) => e.direction === 'render');
 const def = render.find((e) => e.isDefault);
 const vac = render.find((e) => /Virtual Audio Cable/i.test(e.name)) ?? render[1];
 
-// Collect sessions across all endpoints
 const sessions = [];
 for (const ep of eps) {
   const r = await A.call('sessions.list', { endpointId: ep.id });
@@ -69,18 +64,15 @@ async function restore(pid) {
   await A.call('route.app', { pid, endpointName: def.name });
 }
 
-// 1) foreign ACTIVE process: real change (VAC) then restore
 const a1 = activeForeign[0];
 if (a1) {
   const ok = await tryRoute('foreign-active', a1.pid, vac);
   if (ok?.ok) await restore(a1.pid);
 }
 
-// 2) foreign IDLE process: set to default (no audible change either way)
 const i1 = idleForeign[0];
 if (i1) await tryRoute('foreign-idle', i1.pid, def);
 
-// 3) fresh process actively rendering a tone (not the caller): VAC then restore
 const B = makeSidecar('B');
 await B.call('diag.playTone', { seconds: 15 });
 await sleep(1200);

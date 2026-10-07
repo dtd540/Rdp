@@ -5,7 +5,7 @@ One Windows app that plays **Spotify or YouTube Music through your microphone in
 ```
 Spotify desktop app ──┐
                       ├──▶ VoiceMeeter Aux Input ── music strip ──A1──▶ your ears
-YouTube Music (built-in player) ┘                                   └──B1──┐
+YouTube Music (your browser) ┘                                   └──B1──┐
                                                                           ▼
 your microphone ──▶ VoiceMeeter hardware strip ──────────B1───────────────┤
                                                                           ▼
@@ -18,7 +18,7 @@ VRChat + game audio stay on your normal speakers → no feedback loop.
 
 - **VoiceMeeter** (free donationware mixer from VB-Audio) provides the virtual microphone Windows and VRChat see, and mixes your voice with the music. On first run the app offers to fetch the official installer (one consent click — never bundled/redistributed), then applies the complete routing configuration over VoiceMeeter's Remote API.
 - **Spotify**: the app routes the real Spotify desktop process to the VoiceMeeter music strip using Windows' per-app routing API (`AudioPolicyConfig.SetPersistedDefaultAudioEndpoint`). If it cannot route, use Windows Settings → System → Sound → Volume mixer and set Spotify's Output device to the VoiceMeeter music input; the app verifies the actual Spotify session endpoint.
-- **YouTube Music** plays in an embedded window inside the app whose audio output is pointed straight at the VoiceMeeter music strip — so only this app's audio reaches VRChat.
+- **YouTube Music** plays in your browser — Chrome, Edge, Firefox or Brave. Pick that browser in the app and the app routes its audio to the VoiceMeeter music strip, so only that browser's audio reaches VRChat. Windows routes audio per application rather than per tab, so close other tabs that make noise first.
 - **Verification**: live meters on the mic, music input and VoiceMeeter Output; session checks confirm Spotify is on the selected input and VRChat is capturing VoiceMeeter Output.
 - **Tray controls**: music volume, *send music to VRChat mic* mute toggle, and voice ducking (music drops 12 dB while you talk).
 - **App background**: Settings → App background paints any picture or animated GIF from this PC behind the app (PNG, JPG, WEBP, BMP, AVIF, GIF; under 25 MB). The file is referenced in place — it is never copied or uploaded — so moving or deleting it just tells you to pick it again, and *Remove* restores the default dark theme.

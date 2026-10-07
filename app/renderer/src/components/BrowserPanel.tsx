@@ -2,18 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'reac
 import { bridge, hasNativeWebviews } from '../bridge';
 import { BLANK, faviconUrl, hostOf, normalizeUrl, SEARCH } from '../browserUrl';
 
-/**
- * Embedded browser.
- *
- * The page itself is not rendered here. Each tab is a native WebContentsView owned by
- * the main process (app/main/browserView.ts); this component only draws the chrome and
- * reports the rectangle reserved for the page. That keeps a page's DOM, its session and
- * its navigation history completely out of the renderer, and avoids the deprecated
- * <webview> tag's focus and stacking problems.
- *
- * Only the active tab's view is on screen; the rest stay alive in state and reload from
- * the persisted session on restart, so a dozen tabs are not a dozen painted surfaces.
- */
 
 const HOME = 'https://www.google.com/';
 const SESSION_KEY = 'vcmb:browser:session:v1';
@@ -37,7 +25,6 @@ interface Tab {
   crashed: boolean;
 }
 
-/** Events pushed from main for a specific tab. */
 interface BrowserEvent {
   id?: string;
   type?: string;
@@ -88,11 +75,9 @@ export const BrowserPanel: FC = () => {
   const stageRef = useRef<HTMLDivElement | null>(null);
 
   const active = useMemo(() => tabs.find((t) => t.id === activeId) ?? tabs[0], [tabs, activeId]);
-  /** The event listener below subscribes once, so it reads the live tab id from a ref. */
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
 
-  // Restore the previous session once, on mount.
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current) return;
@@ -104,14 +89,12 @@ export const BrowserPanel: FC = () => {
     setAddress(saved[0].url);
   }, []);
 
-  // Persist as soon as the tab list settles, not on every keystroke.
   useEffect(() => {
     if (!restored.current) return;
     const payload = tabs.filter((t) => t.url && t.url !== HOME).map(({ id, url, title }) => ({ id, url, title }));
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
     } catch {
-      /* storage full or blocked — session restore is a convenience, not a requirement */
     }
   }, [tabs]);
 
@@ -119,17 +102,12 @@ export const BrowserPanel: FC = () => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...changes } : t)));
   }, []);
 
-  // Reconcile the native views whenever the set of tabs, their URLs, or which one is
-  // showing changes. Titles stream in from events, so they deliberately do not trigger this.
   const tabSignature = `${tabs.map((t) => `${t.id}:${t.url}`).join('|')}::${activeId}::${active.crashed ? 'crashed' : 'live'}`;
   useEffect(() => {
     void bridge.op('browser:sync', JSON.stringify({ tabs: tabs.map(({ id, url }) => ({ id, url })), activeId }));
-    // tabSignature is the deliberate dependency; tabs/activeId are read inside.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabSignature]);
 
-  // Hand main the rectangle to paint the page into. Everything that can move the stage —
-  // a window resize, a tab switch, or the workspace scrolling — funnels through here.
   const lastBounds = useRef('');
   const pushBounds = useCallback(() => {
     const el = stageRef.current;
@@ -156,7 +134,6 @@ export const BrowserPanel: FC = () => {
     const observer = new ResizeObserver(schedule);
     observer.observe(el);
     window.addEventListener('resize', schedule);
-    // Capture phase: the workspace is its own scroll container, not the document.
     document.addEventListener('scroll', schedule, true);
     schedule();
     return () => {
@@ -167,7 +144,6 @@ export const BrowserPanel: FC = () => {
     };
   }, [pushBounds, tabSignature]);
 
-  // State for every tab arrives on one channel from main.
   useEffect(() => {
     return bridge.on((method, params) => {
       if (method !== 'browser') return;
@@ -197,7 +173,6 @@ export const BrowserPanel: FC = () => {
     });
   }, [patch]);
 
-  // The native view paints above the app, so it must go away with this component.
   useEffect(() => {
     return () => {
       void bridge.op('browser:hide');
@@ -206,7 +181,6 @@ export const BrowserPanel: FC = () => {
 
   const navigate = useCallback(
     (input: string, id = activeId) => {
-      // An empty omnibox goes to the start page rather than searching for nothing.
       const url = normalizeUrl(input) ?? BLANK;
       patch(id, { url, crashed: false });
       setAddress(url === BLANK ? '' : url);
@@ -248,7 +222,6 @@ export const BrowserPanel: FC = () => {
     });
   };
 
-  // Omnibox: history first, then quick links, then a Google search fallback.
   const suggest = (query: string) => {
     const q = query.trim().toLowerCase();
     if (!q) {
@@ -463,7 +436,6 @@ export const BrowserPanel: FC = () => {
           </div>
         </div>
       ) : (
-        /* The native page is drawn by main directly over this reserved rectangle. */
         <div className="browser-stage" ref={stageRef} />
       )}
     </div>

@@ -26,9 +26,6 @@ export interface ChatIntegrationDefinition {
   format: string;
 }
 
-/** Visible Nexus integration concepts, implemented with original local sources where possible.
- * Descriptions are written to read like VRC Nexus where the underlying behavior matches the app.
- */
 export const CHAT_INTEGRATIONS: ChatIntegrationDefinition[] = [
   { id: 'personal_status', label: 'Personal status', description: 'Write a personal status message that appears in the chatbox.', source: 'local', defaultEnabled: false, emoji: '💭', format: '{emoji} {value}' },
   { id: 'window_activity', label: 'Window activity', description: 'Show the active foreground window title on this PC. Titles can contain private information; enable it only if you are comfortable sharing it nearby.', source: 'local', defaultEnabled: false, emoji: '🪟', format: '{emoji} {value}' },
@@ -57,7 +54,6 @@ export const DEFAULT_CHAT_INTEGRATIONS: ChatIntegrationSetting[] = CHAT_INTEGRAT
 
 const definitions = new Map(CHAT_INTEGRATIONS.map((item) => [item.id, item]));
 
-/** Stored settings are untrusted: preserve only known ids and bounded single-line formatting. */
 export function normaliseChatIntegrations(raw: unknown): ChatIntegrationSetting[] {
   if (!Array.isArray(raw)) return DEFAULT_CHAT_INTEGRATIONS.map((item) => ({ ...item }));
   const saved = new Map<string, Partial<ChatIntegrationSetting>>();
@@ -80,7 +76,6 @@ function readable(value: unknown): string {
   return typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 144) : '';
 }
 
-/** Nexus-style message frames, offered with original artwork strings. */
 export const CHAT_MESSAGE_FRAMES = {
   none: { label: 'None', top: '', bottom: '' },
   lines: { label: 'Lines', top: '━━━━━━━━', bottom: '━━━━━━━━' },
@@ -98,15 +93,11 @@ export function normaliseMessageFrame(raw: unknown): ChatMessageFrameId {
   return raw === 'custom' || (typeof raw === 'string' && Object.prototype.hasOwnProperty.call(CHAT_MESSAGE_FRAMES, raw)) ? raw as ChatMessageFrameId : 'none';
 }
 
-/** Separator between integration lines: newline (default) or a pipe glyph. */
 export type ChatLineSeparator = 'newline' | 'pipe';
 export function normaliseLineSeparator(raw: unknown): ChatLineSeparator {
   return raw === 'pipe' ? 'pipe' : 'newline';
 }
 
-/** Inline border style: wraps a single message line around its content, like Nexus.
- * None = no border; custom = user-defined left/right wraps.
- */
 export const CHAT_BORDER_STYLES = {
   none: { label: 'None', left: '', right: '' },
   brackets: { label: '[ Brackets ]', left: '[ ', right: ' ]' },
@@ -140,9 +131,6 @@ export function normaliseBorderStyle(raw: unknown): ChatBorderStyleId {
   return raw === 'custom' || (typeof raw === 'string' && Object.prototype.hasOwnProperty.call(CHAT_BORDER_STYLES, raw)) ? raw as ChatBorderStyleId : 'none';
 }
 
-/** Renders a bounded, custom left/right wrap pair, or a named preset border.
- * Only applied when at least one side is non-empty, matching Nexus behavior.
- */
 export function applyBorder(text: string, style: ChatBorderStyleId, customLeft = '', customRight = ''): string {
   if (!text) return text;
   let left = '';
@@ -159,7 +147,6 @@ export function applyBorder(text: string, style: ChatBorderStyleId, customLeft =
   return left + text + right;
 }
 
-/** Renders a bounded, custom top/bottom border pair, or a named preset frame. */
 export function applyMessageFrame(text: string, frame: ChatMessageFrameId, customTop = '', customBottom = ''): string {
   if (!text) return text;
   let top = '';
@@ -176,7 +163,6 @@ export function applyMessageFrame(text: string, frame: ChatMessageFrameId, custo
   return [top, text, bottom].filter(Boolean).join('\n');
 }
 
-/** Nexus-style 15-cell media progress bar with a playhead dot. */
 export function mediaProgressBar(positionSeconds: number | undefined, durationSeconds: number | undefined, cells = 15): string {
   if (!Number.isFinite(durationSeconds) || (durationSeconds ?? 0) <= 0 || !Number.isFinite(positionSeconds)) return '';
   const ratio = Math.max(0, Math.min(1, (positionSeconds ?? 0) / (durationSeconds ?? 1)));
@@ -191,10 +177,6 @@ function clockMinutes(totalSeconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-/** Compose in user-defined order. Empty/unavailable data contributes no line; no truncation occurs here.
- * Output order: base template + integration lines joined, then inline border, then frame.
- * This mirrors Nexus, where the border wraps each rendered line and the frame wraps the full block.
- */
 export function composeChatIntegrations(
   base: string,
   settings: ChatIntegrationSetting[],
@@ -243,37 +225,21 @@ export function formatUptime(seconds: number): string {
 }
 
 export interface ChatIntegrationOptions {
-  /** Show "On desktop in 'Title'" (Nexus wording) instead of the bare title. */
   windowQuoted?: boolean;
-  /** Omit media metadata unless its session is actively playing. */
   mediaOnlyPlaying?: boolean;
-  /** Prefix the time with "My time: ". */
   timePrefix?: boolean;
-  /** Include the short timezone name after the time. */
   timeZoneName?: boolean;
-  /** Show "Title - Artist" instead of "Artist — Title". */
   mediaDashFormat?: boolean;
-  /** Append the media source app in parentheses. */
   mediaSource?: boolean;
-  /** Append m:ss / m:ss elapsed progress. */
   mediaProgress?: boolean;
-  /** Append the 15-cell progress bar. */
   mediaProgressBar?: boolean;
-  /** Lyricify line is shown only when media is playing. Unused until a provider is connected. */
   lyricifyOnlyPlaying?: boolean;
-  /** World line reads "In <world>". */
   worldPrefixed?: boolean;
-  /** Player count reads "N in instance". */
   playersSuffixed?: boolean;
-  /** Uptime reads "Up 1h 23m". */
   uptimePrefixed?: boolean;
-  /** Battery reads "Battery 95% ⚡". */
   batteryPrefixed?: boolean;
-  /** Inline border style wrapping each integration line. */
   borderStyle?: ChatBorderStyleId;
-  /** Custom left border text (only used when borderStyle is "custom"). */
   borderLeft?: string;
-  /** Custom right border text (only used when borderStyle is "custom"). */
   borderRight?: string;
 }
 
@@ -284,7 +250,6 @@ export const DEFAULT_CHAT_INTEGRATION_OPTIONS: ChatIntegrationOptions = {
   lyricifyOnlyPlaying: true, borderStyle: 'none', borderLeft: '', borderRight: ''
 };
 
-/** Stored option objects are untrusted; keep known boolean flags and bounded message-style strings only. */
 export function normaliseChatIntegrationOptions(raw: unknown): ChatIntegrationOptions {
   const value = raw && typeof raw === 'object' ? raw as Partial<ChatIntegrationOptions> : {};
   return {

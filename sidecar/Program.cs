@@ -36,7 +36,6 @@ public static class Program
 
     public static int Main()
     {
-        // stdout is the RPC channel — only our JSON may go there.
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.InputEncoding = System.Text.Encoding.UTF8;
         _meters = new MeterService();
@@ -59,7 +58,6 @@ public static class Program
             }
             if (req is null || string.IsNullOrEmpty(req.Method)) continue;
 
-            // Dispatch concurrently; responses are id-keyed.
             var captured = req;
             ThreadPool.QueueUserWorkItem(_ => Handle(captured));
         }
@@ -154,7 +152,6 @@ public static class Program
             }
             catch
             {
-                // treat as not running
             }
         }
         return new
@@ -250,7 +247,6 @@ public static class Program
         var db = Rpc.Param<double>(parms, "db");
         if (strip >= 0)
         {
-            // direct strip write (bypasses the user-gain bookkeeping for non-music strips)
             Vm.TrySetFloat($"Strip[{strip}].Gain", (float)db);
         }
         else
@@ -290,8 +286,8 @@ public static class Program
     {
         lock (ServiceGate)
         {
-            try { _duck?.Dispose(); } catch { /* ignore */ }
-            try { _vm?.Dispose(); } catch { /* ignore */ }
+            try { _duck?.Dispose(); } catch { }
+            try { _vm?.Dispose(); } catch { }
             _duck = null;
             _vm = null;
             _cfg = null;
@@ -310,8 +306,6 @@ public static class Program
         if (ep is null)
             return new { ok = false, method = "manual", detail = $"endpoint '{endpointName}' not found" };
 
-        // Candidate PIDs: explicit first, then the live audio-session owner
-        // (the session owner is what Windows actually keys the persisted route on).
         var candidates = new List<uint>();
         int? resolvedPid = null;
         if (!string.IsNullOrWhiteSpace(processName))
@@ -322,13 +316,10 @@ public static class Program
         if (pidParam is > 0 && !candidates.Contains((uint)pidParam.Value))
             candidates.Add((uint)pidParam.Value);
         else if (pidParam == 0 && !candidates.Contains((uint)Environment.ProcessId))
-            candidates.Add((uint)Environment.ProcessId); // 0 = sidecar itself
+            candidates.Add((uint)Environment.ProcessId);
         if (candidates.Count == 0)
             return new { ok = false, method = "manual", detail = $"No live audio-session PID found for '{processName ?? "target"}'. Start playback in the target app, then retry." };
 
-        // If caller requested a named music app, do not route just because a
-        // process with that name exists: the PID must own an actual audio session.
-        // RouteApp already resolved session owners first; expose what we targeted.
         lock (ServiceGate)
         {
             _router ??= new AppRouter();
@@ -362,7 +353,6 @@ public static class Program
 
     private static object OpenSettings()
     {
-        // "App volume and device preferences" — try the direct page, fall back to Sound.
         foreach (var uri in new[] { "ms-settings:apps-volume", "ms-settings:sound" })
         {
             try
@@ -372,7 +362,6 @@ public static class Program
             }
             catch
             {
-                // next
             }
         }
         throw new InvalidOperationException("could not open Windows Settings");
@@ -380,8 +369,8 @@ public static class Program
 
     private static void Cleanup()
     {
-        try { _meters.Dispose(); } catch { /* ignore */ }
-        try { VmShutdown(); } catch { /* ignore */ }
+        try { _meters.Dispose(); } catch { }
+        try { VmShutdown(); } catch { }
         lock (ServiceGate) { _router?.Dispose(); }
     }
 }

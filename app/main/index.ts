@@ -7,14 +7,8 @@ import { getState, setState } from './state';
 import { createTray, rebuildTray } from './tray';
 import { disposeUpdater } from './updater';
 
-// Keep audio in the browser process so OUR PID owns our audio sessions —
-// per-app routing (SetPersistedDefaultAudioEndpoint) keys on the session owner.
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 
-// Dev/preview runs must not collide with an installed copy: the packaged app
-// owns the shared userData profile and its single-instance lock, which made a
-// second (dev) instance quit silently with exit 0. Give unpackaged runs their
-// own profile so both can coexist and dev never overwrites release state.
 if (!app.isPackaged) {
   app.setPath('userData', path.join(app.getPath('appData'), 'vrchat-music-bridge-dev'));
 }
@@ -54,9 +48,6 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#0f0e14',
     autoHideMenuBar: true,
-    // Drop the stock Windows title bar and let the app's own topbar act as the
-    // title bar. On Windows the native min/max/close buttons are re-exposed as an
-    // overlay so we keep OS-standard window behaviour (snap layouts, aero shake).
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden' as const,
@@ -85,11 +76,7 @@ function createWindow(): void {
   win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const url = new URL(params.src || 'about:blank');
 
-    // The browser tab no longer attaches a webview — it renders through a main-process
-    // WebContentsView (see browserView.ts), which applies the same sandbox rules there.
-    // The only webview left is the embedded Discord client.
 
-    // The embedded Discord client: discord.com only.
     if (url.protocol !== 'https:' || url.hostname !== 'discord.com') {
       event.preventDefault();
       return;
@@ -124,14 +111,11 @@ function createWindow(): void {
     callback(false);
   });
 
-  // Same for the browser tab: no camera, mic, geolocation or notifications.
   session.fromPartition('persist:browser').setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
 
   win.on('closed', () => {
-    // Browser views are children of this window; tear them down with it so a
-    // hidden renderer process cannot outlive the window.
     disposeBrowserViews();
     win = null;
   });
@@ -139,8 +123,6 @@ function createWindow(): void {
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  // Windows has already signalled the first instance to focus itself; make the
-  // quit visible in logs instead of exiting silently with no trace.
   console.error('[app] another instance already holds the single-instance lock — quitting this one.');
   app.quit();
 } else {
@@ -156,7 +138,6 @@ if (!gotLock) {
       console.error('[sidecar] failed to start:', err);
     }
 
-    // Re-apply persistent controls once the sidecar is up.
     const s = getState();
     void sidecar.tryCall('vm.setDucking', {
       enabled: s.duckingEnabled,
@@ -167,7 +148,6 @@ if (!gotLock) {
     createTray(trayCtx);
     createWindow();
 
-    // Smoke test: VCB_SMOKE=<seconds> → auto-quit after verifying the sidecar.
     if (process.env.VCB_SMOKE) {
       const secs = Number(process.env.VCB_SMOKE) || 8;
       setTimeout(async () => {
@@ -193,7 +173,6 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
-    // Stay in the tray — the bridge keeps music flowing.
     rebuildTray(trayCtx);
   });
 

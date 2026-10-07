@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { bridge, isElectron, pickMusicEndpoint, pickMics, pickVmOutput, rpc, safeRpc, type AppState, type AudioEndpointInfo, type AudioSettingsScan, type VoiceMeeterRoutingState } from '../bridge';
+import { DEFAULT_MUSIC_BROWSER, MUSIC_BROWSERS, musicBrowser, musicTargetProcess } from '../musicBrowser';
 import { MeterBar } from './MeterBar';
 import { useWindowVisible } from '../useWindowVisible';
 
@@ -37,7 +38,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   const [vrchatOk, setVrchatOk] = useState<boolean | null>(null);
   const [volume, setVolume] = useState(state.musicVolumeDb);
   const [selectedMic, setSelectedMic] = useState(state.micEndpointName ?? '');
-  const [selfName, setSelfName] = useState('app');
+  const [browserId, setBrowserId] = useState(DEFAULT_MUSIC_BROWSER);
   const [configState, setConfigState] = useState<'checking' | 'ready' | 'error'>('checking');
   const [configDetail, setConfigDetail] = useState('Scanning current audio route…');
   const [routingState, setRoutingState] = useState<VoiceMeeterRoutingState | null>(null);
@@ -49,6 +50,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   const volCommit = useRef<number | null>(null);
 
   const musicEp = useMemo(() => pickMusicEndpoint(eps), [eps]);
+  const musicSourceLabel = tab === 'spotify' ? 'Spotify' : musicBrowser(browserId).label;
   const vmOutput = useMemo(() => pickVmOutput(eps), [eps]);
   const mics = useMemo(() => pickMics(eps), [eps]);
   const micEp = useMemo(
@@ -174,8 +176,6 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
       const endpoints = (await safeRpc<AudioEndpointInfo[]>('endpoints.list')) ?? [];
       if (stopped) return;
       setEps(endpoints);
-      setSelfName((await bridge.selfInfo()).name);
-      // Startup scan is read-only: never move A1 or reconfigure audio without an explicit action.
       await scanAudio();
       const routeState = await safeRpc<VoiceMeeterRoutingState>('vm.routingState');
       if (routeState) {
@@ -205,8 +205,6 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
     if (micEp) void startMeter(micEp.id);
   }, [windowVisible, musicEp?.id, vmOutput?.id, micEp?.id]);
 
-  // Release the capture clients when this view goes away or the window is hidden:
-  // an open WASAPI client on the microphone is a real, ongoing audio cost.
   useEffect(() => {
     if (!windowVisible) stopAllMeters();
   }, [windowVisible]);
@@ -219,19 +217,16 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
     if (!musicEp || liveCheckInFlight.current) return;
     liveCheckInFlight.current = true;
     try {
-      const proc = tab === 'spotify' ? 'Spotify' : selfName;
+      const proc = musicTargetProcess(tab, browserId);
       const s = await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', {
         endpointId: musicEp.id,
         processName: proc
       });
       const active = Boolean(s && s.pid > 0 && s.state === 'active');
       setLiveSession(active);
-      // An active session on the selected VoiceMeeter virtual input confirms the
-      // application's audio has arrived at the mixer, even after navigating back
-      // to this screen and losing its transient route-button state.
       if (active && configState === 'ready') {
         setRouteOk(true);
-        setRouteDetail('Spotify audio session is active on the VoiceMeeter music input');
+        setRouteDetail(`${musicSourceLabel} audio session is active on the VoiceMeeter music input`);
       }
     } finally {
       liveCheckInFlight.current = false;
@@ -252,10 +247,6 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
     }
   };
 
-  // Session scans are the most expensive call we make (WASAPI session
-  // enumeration can take seconds on machines with many virtual devices), so poll
-  // on a slow cadence, never overlap a slow scan with the next tick, and stop
-  // entirely while the window is hidden.
   const sessionsBusy = useRef(false);
   useEffect(() => {
     if (!windowVisible) return;
@@ -269,7 +260,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
     void poll();
     const id = window.setInterval(() => void poll(), 15000);
     return () => window.clearInterval(id);
-  }, [windowVisible, musicEp?.id, vmOutput?.id, tab, selfName]);
+  }, [windowVisible, musicEp?.id, vmOutput?.id, tab, browserId]);
 
   const doRoute = async () => {
     if (!musicEp) {
@@ -278,11 +269,8 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
       return;
     }
     setRouteOk(null);
-    setRouteDetail('Routing music app to VoiceMeeter…');
-    const params =
-      tab === 'spotify'
-        ? { processName: 'Spotify', endpointName: musicEp.name }
-        : { self: true, endpointName: musicEp.name };
+    setRouteDetail(`Routing ${musicSourceLabel} to VoiceMeeter…`);
+    const params = { processName: musicTargetProcess(tab, browserId), endpointName: musicEp.name };
     const r = await safeRpc<{ ok: boolean; method: string; detail?: string }>('route.app', params);
     setRouteOk(r?.ok ?? false);
     setRouteDetail(r?.detail ?? 'call failed');
@@ -416,36 +404,37 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
         <div className="card">
           <h2>YouTube Music</h2>
           <p className="sub">
-            Sign in to YouTube Music here. Its app audio is routed to the VoiceMeeter music input; only that audio is mixed into the VRChat mic.
+            YouTube Music plays in a browser tab. Pick that browser, start a song, then route it.
+            Windows moves audio per application rather than per tab, so everything that browser
+            plays goes to the VoiceMeeter music input — close other tabs that make noise first.
           </p>
-          <div className="row" style={{ marginBottom: 12 }}>
+          <div className="row">
+            <label htmlFor="dashboard-music-browser"><b>Browser playing YouTube Music</b></label>
+            <select
+              id="dashboard-music-browser"
+              value={browserId}
+              onChange={(event) => {
+                setBrowserId(event.target.value);
+                setRouteOk(null);
+                setRouteDetail(null);
+                setLiveSession(null);
+              }}
+            >
+              {MUSIC_BROWSERS.map((browser) => <option key={browser.id} value={browser.id}>{browser.label}</option>)}
+            </select>
+          </div>
+          <div className="row" style={{ marginTop: 12 }}>
             <button className="primary" onClick={() => void doRoute()}>
-              {routeOk ? 'Re-route this app' : 'Connect YouTube Music → bridge'}
+              {routeOk ? 'Re-route browser' : 'Route browser → bridge'}
+            </button>
+            <button onClick={() => void bridge.op('openExternal', 'https://music.youtube.com')}>
+              Open YouTube Music
             </button>
             <button className="small ghost" onClick={() => void checkLive()}>
               Verify
             </button>
             {routeDetail ? <span className={`pill ${routeOk ? 'ok' : routeOk === false ? 'fail' : ''}`}>{routeDetail}</span> : null}
             {!isElectron ? <span className="pill">Browser preview — mocked routing</span> : null}
-          </div>
-          <div className="yt-host">
-            {isElectron ? (
-              <webview
-                src="https://music.youtube.com"
-                partition="persist:ytmusic"
-                allowpopups
-                // eslint-disable-next-line react/no-unknown-property
-                useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-              />
-            ) : (
-              <div className="yt-placeholder">
-                <span className="icon">▶</span>
-                <div>
-                  YouTube Music player lives inside the desktop app.
-                  <div className="detail">Browser preview — UI and mock audio stack only.</div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

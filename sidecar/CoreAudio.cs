@@ -32,7 +32,6 @@ public sealed record AudioSettingsScan(
     List<AudioEndpointInfo> PhysicalPlaybackOutputs,
     List<AudioSessionRouteInfo> SpotifySessions);
 
-/// <summary>Endpoint + session discovery over the MMDevice API.</summary>
 public static class CoreAudio
 {
     public static AudioEndpointInfo? GetDefaultEndpoint(DataFlow flow, Role role)
@@ -53,7 +52,6 @@ public static class CoreAudio
         }
     }
 
-    /// <summary>Read-only snapshot of Windows defaults and active/inactive Spotify session routes.</summary>
     public static AudioSettingsScan ScanSettings()
     {
         var endpoints = ListEndpoints(force: true);
@@ -77,7 +75,6 @@ public static class CoreAudio
             }
             catch
             {
-                // An endpoint may disappear or reject session enumeration during the scan.
             }
         }
 
@@ -98,12 +95,6 @@ public static class CoreAudio
     private static long _endpointCacheTick;
     private const long EndpointCacheTtlMs = 30000;
 
-    /// <summary>
-    /// Enumerating WASAPI endpoints costs seconds on machines with lots of virtual
-    /// audio devices, and the UI polls for the list every few seconds. Serve a
-    /// short-lived snapshot so overlapping polls collapse into a single
-    /// enumeration instead of stacking. Pass force:true for an explicit rescan.
-    /// </summary>
     public static List<AudioEndpointInfo> ListEndpoints(bool force = false)
     {
         lock (EndpointCacheGate)
@@ -114,8 +105,6 @@ public static class CoreAudio
 
             var fresh = EnumerateEndpoints();
             _endpointCache = fresh;
-            // Start the TTL once enumeration completes, not before a possibly slow
-            // device scan; otherwise waiting callers can immediately re-enumerate.
             _endpointCacheTick = Environment.TickCount64;
             return fresh.ToList();
         }
@@ -186,7 +175,6 @@ public static class CoreAudio
         var matched = endpoints.FirstOrDefault(e => DeviceNamesMatch(e.Name, name));
         if (matched is not null) return matched;
 
-        // VoiceMeeter may prefix the selected device name with its driver type.
         var colon = name.IndexOf(':');
         if (colon is > 0 and < 8 && new[] { "WDM", "KS", "MME", "ASIO" }.Contains(name[..colon], StringComparer.OrdinalIgnoreCase))
         {
@@ -204,21 +192,18 @@ public static class CoreAudio
             string.Equals(e.Name, n, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>True for virtual playback devices, never a physical listening output.</summary>
     public static bool IsVirtualRender(string name) =>
         name.Contains("VoiceMeeter", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Virtual Audio Cable", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("VB-Audio", StringComparison.OrdinalIgnoreCase) ||
         name.StartsWith("CABLE", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>True for VoiceMeeter / VB-Cable / other virtual capture endpoints — never a real mic.</summary>
     public static bool IsVirtualCapture(string name) =>
         name.Contains("VoiceMeeter", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("Virtual Audio Cable", StringComparison.OrdinalIgnoreCase) ||
         name.Contains("VB-Audio", StringComparison.OrdinalIgnoreCase) ||
         name.StartsWith("CABLE", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Sub-search: endpoint whose name contains the fragment (e.g. "VoiceMeeter Aux Input").</summary>
     public static AudioEndpointInfo? FindByNameContains(string fragment, string? direction = null) =>
         ListEndpoints().FirstOrDefault(e =>
             (direction is null || e.Direction == direction) &&
@@ -252,8 +237,6 @@ public static class CoreAudio
         {
             mgr.RefreshSessions();
             var result = new List<AudioSessionInfo>();
-            // Resolve each unique process at most once per endpoint snapshot; several
-            // audio sessions commonly belong to the same application process.
             var processNames = new Dictionary<int, string>();
             var sessions = mgr.Sessions;
             for (var i = 0; i < sessions.Count; i++)
@@ -311,11 +294,10 @@ public static class CoreAudio
         }
         finally
         {
-            try { mgr.Dispose(); } catch { /* ignore */ }
+            try { mgr.Dispose(); } catch { }
         }
     }
 
-    /// <summary>First session on the endpoint owned by the named process (name without .exe).</summary>
     public static AudioSessionInfo? FindSessionByProcess(string endpointId, string processName)
     {
         var target = processName.Trim();
@@ -324,17 +306,9 @@ public static class CoreAudio
         var matches = ListSessions(endpointId)
             .Where(s => string.Equals(s.ProcessName, target, StringComparison.OrdinalIgnoreCase))
             .ToList();
-        // A process may have multiple sessions on an endpoint; prefer a live stream
-        // over an older inactive session so verification reflects actual playback/capture.
         return matches.FirstOrDefault(s => s.State == "active") ?? matches.FirstOrDefault();
     }
 
-    /// <summary>
-    /// Resolve the PID that actually owns the named process's Windows audio session.
-    /// Do not fall back to an arbitrary same-named process: Spotify/Electron commonly
-    /// have helper processes, and persisting a route against one of those reports
-    /// success without moving the process that is rendering audio.
-    /// </summary>
     public static int? FindPidByProcess(string processName)
     {
         var target = processName.Trim();
@@ -348,8 +322,6 @@ public static class CoreAudio
                 s.Pid > 0 && string.Equals(s.ProcessName, target, StringComparison.OrdinalIgnoreCase)));
         }
 
-        // Prefer the session currently rendering. Inactive sessions still identify
-        // the correct owner, but are a fallback when the app is paused.
         return sessions.FirstOrDefault(s => s.State == "active")?.Pid
                ?? sessions.FirstOrDefault()?.Pid;
     }

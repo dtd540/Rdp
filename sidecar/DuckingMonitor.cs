@@ -3,11 +3,6 @@ using NAudio.Wave;
 
 namespace AudioBridge.Sidecar;
 
-/// <summary>
-/// Captures the microphone directly and ducks the music strip while speech is detected.
-/// Hysteresis: instant duck above threshold, release only after 600 ms of quiet
-/// (6 dB below threshold) so words don't make the music pump.
-/// </summary>
 public sealed class DuckingMonitor : IDisposable
 {
     private readonly VmConfig _config;
@@ -55,7 +50,7 @@ public sealed class DuckingMonitor : IDisposable
                         _config.SetDucked(false);
                     }
                 }
-                try { capture.Dispose(); } catch { /* ignore */ }
+                try { capture.Dispose(); } catch { }
             };
 
             try
@@ -87,7 +82,6 @@ public sealed class DuckingMonitor : IDisposable
             if (match is not null && !CoreAudio.IsVirtualCapture(match.Name))
                 return match;
         }
-        // Default capture, never a virtual cable (would feedback).
         return eps.FirstOrDefault(e => e.IsDefault && !CoreAudio.IsVirtualCapture(e.Name))
                ?? eps.FirstOrDefault(e => !CoreAudio.IsVirtualCapture(e.Name));
     }
@@ -96,8 +90,6 @@ public sealed class DuckingMonitor : IDisposable
     {
         if (!_config.DuckingEnabled) return;
 
-        // One evaluation per capture buffer (~10 Hz for a 100 ms buffer). Shares
-        // the allocation-free peak scan used by the meters.
         var now = Environment.TickCount64;
         var peak = MeterService.PeakFromBuffer(buffer, bytesRecorded, fmt);
         var threshold = _config.DuckThresholdDb;
@@ -129,8 +121,8 @@ public sealed class DuckingMonitor : IDisposable
         {
             _capture = null;
             _endpointId = null;
-            try { c.StopRecording(); } catch { /* ignore */ }
-            try { c.Dispose(); } catch { /* ignore */ }
+            try { c.StopRecording(); } catch { }
+            try { c.Dispose(); } catch { }
             _config.SetDucked(false);
         }
     }

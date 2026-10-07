@@ -10,30 +10,18 @@ public sealed class ConfigResult
     public void Finish() => Ok = Steps.All(s => s.Ok);
 }
 
-/// <summary>
-/// VoiceMeeter API layout: hardware strips, first virtual strip, and physical
-/// output-bus count. B1 follows the physical A buses, so its zero-based index
-/// equals the physical output count (Basic 1, Banana 3, Potato 5).
-/// </summary>
 public sealed record VmLayout(int HwStrips, int VirtStart, int PhysBuses)
 {
     public int B1Index => PhysBuses;
     public static VmLayout ForKind(int kind) => kind switch
     {
-        1 => new VmLayout(2, 2, 1),  // Basic:   2 HW + 1 virtual strip; 1 physical A bus → B1 = bus 1
-        2 => new VmLayout(3, 3, 3),  // Banana:  3 HW + 2 virtual strips; 3 physical A buses → B1 = bus 3
-        3 => new VmLayout(5, 5, 5),  // Potato:  5 HW + 3 virtual strips; 5 physical A buses → B1 = bus 5
+        1 => new VmLayout(2, 2, 1),
+        2 => new VmLayout(3, 3, 3),
+        3 => new VmLayout(5, 5, 5),
         _ => new VmLayout(5, 5, 5)
     };
 }
 
-/// <summary>
-/// Applies the full routing config:
-///   mic        → HW strip 0  (device selected, B1 on, A1 off so speakers can't feed back)
-///   music strip → A1 (you hear it) + B1 (VRChat hears it)
-///   buses       → A1 and B1 unmuted
-/// Also owns music volume + ducking (single writer for Strip[music].Gain).
-/// </summary>
 public sealed class VmConfig
 {
     private readonly VoiceMeeterApi _api;
@@ -43,7 +31,6 @@ public sealed class VmConfig
     public string? MicName { get; private set; }
     public string MusicEndpointHint { get; private set; } = "";
 
-    // Volume + ducking state
     private double _userGainDb = 0;
     private double _duckOffsetDb = 0;
     private bool _duckingEnabled;
@@ -56,7 +43,6 @@ public sealed class VmConfig
     {
         var r = new ConfigResult();
 
-        // 1. engine
         if (!_api.TryGetKind(out var kind, out var kindName, out var version))
         {
             r.Add("engine", false, "VoiceMeeter audio engine is not responding. Open VoiceMeeter and try again.");
@@ -65,8 +51,6 @@ public sealed class VmConfig
         }
         r.Add("engine", true, $"{kindName} {VoiceMeeterApi.FormatVersion(version)}");
 
-        // Validate the physical listening path before changing any mic/music send.
-        // If A1 cannot reach a real output, leave the existing mixer route untouched.
         var speakerName = speakersEndpointName ?? CoreAudio.GetDefaultEndpoint(
             NAudio.CoreAudioApi.DataFlow.Render, NAudio.CoreAudioApi.Role.Multimedia)?.Name;
         var a1Target = string.IsNullOrWhiteSpace(speakerName)
@@ -108,7 +92,6 @@ public sealed class VmConfig
 
         var layout = VmLayout.ForKind(kind);
 
-        // 2. music endpoint + strip
         var musicEp = CoreAudio.FindByNameContains("VoiceMeeter Aux Input", "render")
                       ?? CoreAudio.FindByNameContains("VoiceMeeter Input", "render");
         if (musicEp is null)
@@ -122,7 +105,6 @@ public sealed class VmConfig
         MusicEndpointHint = musicEp.Name;
         r.Add("music-endpoint", true, $"{musicEp.Name} → strip {MusicStrip + 1}");
 
-        // Switch/verify the monitor device before touching the microphone input or sends.
         var outputOk = ApplyA1Output(a1Target.Name, a1Device, out var outputDetail);
         r.Add("a1-output", outputOk, outputDetail);
         if (!outputOk)
@@ -131,27 +113,24 @@ public sealed class VmConfig
             return r;
         }
 
-        // 3. mic device on HW strip 0
         var micName = micEndpointName ?? CoreAudio.ListEndpoints()
             .FirstOrDefault(e => e.Direction == "capture" && !CoreAudio.IsVirtualCapture(e.Name))?.Name;
         MicName = micName;
         r.Add("mic-device", ApplyMicDevice(micName, out var micDetail), micDetail);
 
-        // 4. strip routing
         var strip0 = "Strip[0].";
         var stripM = $"Strip[{MusicStrip}].";
         var routingOk = true;
         routingOk &= SetAndVerifyFloat(strip0 + "Mute", 0);
-        routingOk &= SetAndVerifyFloat(strip0 + "A1", 0);   // mic NOT to speakers (feedback guard)
-        routingOk &= SetAndVerifyFloat(strip0 + "B1", 1);   // mic → VRChat
+        routingOk &= SetAndVerifyFloat(strip0 + "A1", 0);
+        routingOk &= SetAndVerifyFloat(strip0 + "B1", 1);
         routingOk &= SetAndVerifyFloat(stripM + "Mute", 0);
-        routingOk &= SetAndVerifyFloat(stripM + "A1", 1);   // music → your ears
-        routingOk &= SetAndVerifyFloat(stripM + "B1", 1);   // music → VRChat
+        routingOk &= SetAndVerifyFloat(stripM + "A1", 1);
+        routingOk &= SetAndVerifyFloat(stripM + "B1", 1);
         r.Add("strip-routing", routingOk, routingOk
             ? $"mic strip {0}: B1 only · music strip {MusicStrip}: A1+B1 (verified)"
             : $"VoiceMeeter rejected or did not retain a strip send/mute setting (music strip {MusicStrip}, B1 send required). Check the strip buttons manually.");
 
-        // 6. buses: A1 (index 0) + B1 (index physBuses) unmuted.
         var b1 = layout.B1Index;
         var a1Ok = SetAndVerifyFloat("Bus[0].Mute", 0);
         var b1Ok = SetAndVerifyFloat($"Bus[{b1}].Mute", 0);
@@ -218,7 +197,6 @@ public sealed class VmConfig
             return false;
         }
 
-        // Already set?
         if (_api.TryGetString("Strip[0].device.name", out var current) &&
             DeviceMatches(current, micName))
         {
@@ -227,7 +205,6 @@ public sealed class VmConfig
         }
 
         var devices = _api.ListInputDevices();
-        // VoiceMeeter device types: WDM=4, KS=8, MME=1. Prefer WDM for typical Windows devices.
         var match = devices
             .Where(d => DeviceMatches(d.Name, micName))
             .OrderBy(d => d.Driver == 4 ? 0 : d.Driver == 8 ? 1 : d.Driver == 1 ? 2 : 3)
@@ -250,7 +227,7 @@ public sealed class VmConfig
             return false;
         }
 
-        Thread.Sleep(250); // let the engine re-bind
+        Thread.Sleep(250);
         if (_api.TryGetString("Strip[0].device.name", out var verify) && DeviceMatches(verify, micName))
         {
             detail = $"strip 1 → {verify}";
@@ -272,7 +249,6 @@ public sealed class VmConfig
             return string.Concat(s.Where(char.IsLetterOrDigit)).ToLowerInvariant();
         }
         if (a.Equals(b, StringComparison.OrdinalIgnoreCase) || Normalize(a) == Normalize(b)) return true;
-        // "Microphone (Yeti)" vs "Yeti Stereo Microphone" — compare the parenthetical device part too.
         static string Core(string s)
         {
             var i = s.LastIndexOf('(');
@@ -286,8 +262,6 @@ public sealed class VmConfig
         if (cb.Contains(ca, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
-
-    // ---- volume / ducking ----
 
     public void SetUserGain(double db)
     {
@@ -313,7 +287,6 @@ public sealed class VmConfig
     public bool DuckingEnabled { get { lock (_gate) return _duckingEnabled; } }
     public double DuckThresholdDb { get { lock (_gate) return _duckThresholdDb; } }
 
-    /// <summary>Called by the ducking monitor when mic activity changes.</summary>
     public void SetDucked(bool ducked)
     {
         lock (_gate)
@@ -334,7 +307,6 @@ public sealed class VmConfig
 
     public bool SetBusMute(int bus, bool mute) => _api.TrySetFloat($"Bus[{bus}].Mute", mute ? 1 : 0);
 
-    /// <summary>Music strip → B1 (what VRChat hears). Mic strip is never touched.</summary>
     public bool SetMusicToVrchat(bool on)
     {
         lock (_gate)

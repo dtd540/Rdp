@@ -10,7 +10,6 @@ export const DEFAULT_TEMPLATES: ChatTemplate[] = [
   { id: 'break', name: 'Water break', text: '💧 Taking a water break. Back soon!' }
 ];
 
-/** Rendering never truncates silently; callers validate the expanded message. */
 export function renderChatTemplate(template: string, context: ChatContext): string {
   const values: Record<string, string> = {
     time: context.now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(context.clockSeconds ? { second: '2-digit' } : {}), ...(context.clock24h !== undefined ? { hour12: !context.clock24h } : {}) }),

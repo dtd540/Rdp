@@ -33,7 +33,6 @@ function windowsStatus(): Promise<Pick<PcSnapshot, 'drives' | 'running'>> {
   }));
 }
 
-/** One expensive Windows probe per 10s; concurrent callers share the same work. */
 export async function pcSnapshot(): Promise<PcSnapshot> {
   if (snapshotCache && Date.now() - snapshotAt < 10000) return snapshotCache;
   if (pendingSnapshot) return pendingSnapshot;
@@ -60,7 +59,6 @@ export function vrchatLogFolder(): string {
   return path.join(process.env.USERPROFILE ?? os.homedir(), 'AppData', 'LocalLow', 'VRChat', 'VRChat');
 }
 
-/** Extract only world transitions, never usernames/chat/authentication lines. */
 export function parseRecentWorlds(text: string): RecentWorld[] {
   const worlds: RecentWorld[] = [];
   let latest: RecentWorld | undefined;

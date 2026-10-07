@@ -3,16 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import path from 'path';
 import type { SteamGame } from '@shared/rpc';
 
-/**
- * Local Steam library.
- *
- * Everything here is read off this PC — the registry for the install path,
- * `libraryfolders.vdf` for extra library roots, and one `appmanifest_*.acf`
- * per installed title. Public Steam Community data fills in uninstalled
- * purchases when visible; private profiles fall back to local account records.
- */
 
-/** Steam's CDN serves the store art; no auth, no rate limit worth worrying about. */
 function coverUrls(appId: string): Pick<SteamGame, 'coverUrl' | 'coverTallUrl'> {
   return {
     coverUrl: `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
@@ -20,7 +11,6 @@ function coverUrls(appId: string): Pick<SteamGame, 'coverUrl' | 'coverTallUrl'> 
   };
 }
 
-/** `reg query` is the only way to read HKCU without a native dependency. */
 function regQuery(key: string, value: string): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(
@@ -29,7 +19,6 @@ function regQuery(key: string, value: string): Promise<string | null> {
       { windowsHide: true, timeout: 8000 },
       (err, stdout) => {
         if (err) return resolve(null);
-        // "    SteamPath    REG_SZ    c:/program files (x86)/steam"
         const line = String(stdout)
           .split(/\r?\n/)
           .find((l) => l.trim().toLowerCase().startsWith(value.toLowerCase()));
@@ -42,7 +31,6 @@ function regQuery(key: string, value: string): Promise<string | null> {
 
 type VdfToken = { type: 'open' | 'close' | 'word'; value: string };
 
-/** Split Valve KeyValues text into bare tokens: quoted strings and braces. */
 function tokenizeVdf(text: string): VdfToken[] {
   const tokens: VdfToken[] = [];
   const pattern = /"((?:[^"\\]|\\.)*)"|([{}])|([^\s{}"]+)/g;
@@ -59,13 +47,6 @@ function tokenizeVdf(text: string): VdfToken[] {
   return tokens;
 }
 
-/**
- * Tolerant Valve KeyValues reader.
- *
- * The format has no delimiter between a key and its value, so the only thing
- * that distinguishes them is what comes next: a word followed by `{` is a block
- * key, anything else is a value for the key before it.
- */
 export function parseVdf(text: string): Record<string, unknown> {
   const tokens = tokenizeVdf(text);
   const root: Record<string, unknown> = {};
@@ -95,7 +76,6 @@ export function parseVdf(text: string): Record<string, unknown> {
       continue;
     }
     if (tokens[i + 1]?.type === 'word') {
-      // Two words in a row are always a key/value pair — there is no delimiter.
       stack[stack.length - 1][token.value] = tokens[i + 1].value;
       i++;
       continue;
@@ -115,10 +95,6 @@ function unescapeVdf(value: string): string {
   return value.replace(/\\(["\\])/g, '$1');
 }
 
-/**
- * Apps registered in local library folders, not the account's ownership list.
- * These are only one fallback source; uninstalled purchases are not listed here.
- */
 export function libraryApps(steamPath: string): Map<string, number> {
   const apps = new Map<string, number>();
   const vdf = path.join(steamPath, 'steamapps', 'libraryfolders.vdf');
@@ -132,7 +108,6 @@ export function libraryApps(steamPath: string): Map<string, number> {
       for (const [appId, size] of Object.entries(entry?.apps ?? {})) {
         if (!/^\d+$/.test(appId)) continue;
         const bytes = Number(size) || 0;
-        // Keep the largest figure — a title can be listed by several libraries.
         if (!apps.has(appId) || bytes > (apps.get(appId) ?? 0)) apps.set(appId, bytes);
       }
     }
@@ -142,7 +117,6 @@ export function libraryApps(steamPath: string): Map<string, number> {
   return apps;
 }
 
-/** Select one Steam account, never merge another user's library into it. */
 export function accountLibrary(steamPath: string): { steamId?: string; apps: Map<string, number> } {
   const apps = new Map<string, number>();
   try {
@@ -179,7 +153,6 @@ function xmlText(text: string): string {
     .replace(/&(amp|lt|gt|quot|apos);/g, (_, key: string) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[key] ?? '');
 }
 
-/** Public Steam Community owned-games XML; no API key or login token needed. */
 export function parseOwnedGamesXml(xml: string): Map<string, StoreEntry> | null {
   if (!/<games(?:\s[^>]*)?\s*\/>/.test(xml) && !/<games(?:\s[^>]*)?>[\s\S]*<\/games>/.test(xml)) return null;
   const games = new Map<string, StoreEntry>();
@@ -205,7 +178,6 @@ async function publicAccountGames(steamId?: string): Promise<Map<string, StoreEn
   }
 }
 
-/** One name lookup from Valve, cached on disk so a rescan costs nothing. */
 interface StoreEntry {
   name: string;
   type: string;
@@ -222,21 +194,12 @@ function readNameCache(file: string | undefined): NameCache {
   }
 }
 
-/**
- * Resolve names for library-only titles.
- *
- * Installed titles already carry a name from their manifest, so this only hits
- * the network for what is owned but not installed. Requests are capped and
- * cached, with bounded concurrency rather than truncating large libraries.
- */
 async function resolveStoreNames(ids: string[], cacheFile?: string): Promise<NameCache> {
   const cache = readNameCache(cacheFile);
-  // An entry without a name is a half-written or stale cache hit — ask again.
   const missing = ids.filter((id) => !cache[id]?.name);
   let dirty = false;
   let next = 0;
 
-  // Resolve every id, with four workers and a bounded wait for each request.
   await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
     while (next < missing.length) {
       const id = missing[next++];
@@ -267,11 +230,6 @@ async function resolveStoreNames(ids: string[], cacheFile?: string): Promise<Nam
   return cache;
 }
 
-/**
- * The full picture: everything installed, plus everything else the account
- * owns. Titles Steam reports as DLC or a tool are dropped — this is a games
- * list, not an entitlement dump.
- */
 export async function scanSteamLibrary(steamPath: string, cacheFile?: string): Promise<SteamGame[]> {
   return (await scanSteamLibraryResult(steamPath, cacheFile)).games;
 }
@@ -292,7 +250,6 @@ export async function scanSteamLibraryResult(steamPath: string, cacheFile?: stri
   for (const [id, size] of library) {
     if (installedById.has(id)) continue;
     const entry = owned?.get(id) ?? names[id];
-    // Known DLC/tools are excluded, but failed lookups must not hide games.
     if (entry?.type && entry.type !== 'game') continue;
     libraryOnly.push({
       id,
@@ -328,7 +285,6 @@ export async function findSteamPath(): Promise<string | null> {
   return null;
 }
 
-/** Every library root: the Steam dir itself, plus each entry in libraryfolders.vdf. */
 export function libraryRoots(steamPath: string): string[] {
   const roots = new Set<string>([steamPath]);
   const vdf = path.join(steamPath, 'steamapps', 'libraryfolders.vdf');
@@ -340,7 +296,6 @@ export function libraryRoots(steamPath: string): string[] {
     };
     const folders = parsed.libraryfolders ?? {};
     for (const entry of Object.values(folders)) {
-      // Newer files number their entries; skip the numeric size keys.
       if (entry && typeof entry === 'object' && typeof entry.path === 'string') {
         roots.add(path.resolve(entry.path));
       }
@@ -380,7 +335,6 @@ function readManifest(file: string, libraryPath: string): SteamGame | null {
   }
 }
 
-/** Scan every library and return the installed titles, newest-played first. */
 export function scanSteamGames(steamPath: string): SteamGame[] {
   const games: SteamGame[] = [];
   const seen = new Set<string>();
@@ -399,7 +353,6 @@ export function scanSteamGames(steamPath: string): SteamGame[] {
 
     for (const file of files) {
       const game = readManifest(path.join(steamapps, file), libraryPath);
-      // The same title can appear in more than one library; keep the first.
       if (game && !seen.has(game.id)) {
         seen.add(game.id);
         games.push(game);
@@ -407,11 +360,9 @@ export function scanSteamGames(steamPath: string): SteamGame[] {
     }
   }
 
-  // Never-played titles sort last, then by size so the big ones lead.
   return games.sort((a, b) => b.lastPlayed - a.lastPlayed || b.sizeOnDisk - a.sizeOnDisk);
 }
 
-/** Total bytes across a library — cheap because Steam already reports it per title. */
 export function totalSize(games: SteamGame[]): number {
   return games.reduce((sum, game) => {
     if (game.sizeOnDisk > 0) return sum + game.sizeOnDisk;
@@ -423,12 +374,10 @@ export function totalSize(games: SteamGame[]): number {
   }, 0);
 }
 
-/** Steam's URL scheme — no shell argument quoting games can mangle. */
 export function launchUrl(appId: string): string {
   return `steam://rungameid/${appId}`;
 }
 
-/** Hands an owned-but-not-installed title to Steam's own installer. */
 export function installUrl(appId: string): string {
   return `steam://install/${appId}`;
 }

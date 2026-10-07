@@ -22,7 +22,6 @@ export interface IpcContext {
 
 const ALLOWED_EXTERNAL = /^(https?:|spotify:|steam:)/i;
 
-/** Ops take one JSON string; a malformed or absent payload must not throw out of the handler. */
 function readJson<T>(arg: string | undefined): T {
   try {
     return JSON.parse(arg ?? '{}') as T;
@@ -41,7 +40,6 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle('updates:install', () => installDownloadedUpdate());
 
   ipcMain.handle('bridge:call', async (_e, method: string, params?: Record<string, unknown>) => {
-    // "self" routing: the renderer never knows PIDs; we stamp our own.
     if (method === 'route.app' && params && params.self) {
       const { self: _ignored, ...rest } = params;
       const exe = path.basename(process.execPath).replace(/\.exe$/i, '');
@@ -133,7 +131,6 @@ export function registerIpc(ctx: IpcContext): void {
 
         const result = loadBackground(chosen);
         if (!result.ok) return { ok: false, detail: result.detail, image: result.image } satisfies BridgeOpResult;
-        // Only remember a picture we can actually paint.
         setState({ backgroundPath: result.image.path });
         return { ok: true, detail: result.image.name, image: result.image } satisfies BridgeOpResult;
       }
@@ -151,19 +148,15 @@ export function registerIpc(ctx: IpcContext): void {
         if (!steamPath) {
           return { ok: false, detail: 'Steam was not found on this PC.' } satisfies BridgeOpResult;
         }
-        // Names for owned-but-not-installed titles come from Valve and are
-        // cached on disk, so a rescan is local-only most of the time.
         const cacheFile = path.join(app.getPath('userData'), 'steam-name-cache.json');
         return { ok: true, ...await scanSteamLibraryResult(steamPath, cacheFile) } satisfies BridgeOpResult;
       }
       case 'launchGame': {
-        // Only a bare Steam app id, so a crafted argument cannot open something else.
         if (!arg || !/^\d{1,12}$/.test(arg)) return { ok: false, detail: 'bad app id' } satisfies BridgeOpResult;
         await shell.openExternal(launchUrl(arg));
         return { ok: true } satisfies BridgeOpResult;
       }
       case 'installGame': {
-        // Owned but not on disk yet — hand the id to Steam's own installer.
         if (!arg || !/^\d{1,12}$/.test(arg)) return { ok: false, detail: 'bad app id' } satisfies BridgeOpResult;
         await shell.openExternal(installUrl(arg));
         return { ok: true } satisfies BridgeOpResult;
@@ -180,7 +173,6 @@ export function registerIpc(ctx: IpcContext): void {
         const error = await shell.openPath(game.installDir);
         return { ok: !error, detail: error || undefined } satisfies BridgeOpResult;
       }
-      /* ---- Browser tab: one native WebContentsView per tab, owned by main ---- */
       case 'browser:sync': {
         const payload = readJson<{ tabs?: Array<{ id?: unknown; url?: unknown }>; activeId?: unknown }>(arg);
         return { ok: true, browserTabs: syncBrowserTabs(payload).tabs } satisfies BridgeOpResult;
@@ -226,7 +218,6 @@ export function registerIpc(ctx: IpcContext): void {
     }
   });
 
-  // Sidecar events fan out to the renderer.
   sidecar.on('event', (method: string, params: unknown) => {
     ctx.getWin()?.webContents.send('bridge:event', method, params);
   });

@@ -13,11 +13,6 @@ export interface InstallResult {
 
 const OFFICIAL_PAGE = 'https://vb-audio.com/Voicemeeter/';
 
-/**
- * Candidate direct-download URLs for the official installer (zip or exe).
- * Probed with a ranged GET; only content that looks like an archive or an
- * MZ executable is executed — anything else falls through to the official page.
- */
 const DOWNLOAD_CANDIDATES = [
   'https://download.vb-audio.com/Download_VOICEMEETER/VoicemeeterSetup_v1130.zip',
   'https://download.vb-audio.com/Download_VOICEMEETER/Voicemeeter8Setup.exe',
@@ -41,7 +36,6 @@ function localInstallerCandidates(): string[] {
         .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
       out.push(...hits);
     } catch {
-      /* ignore unreadable folders */
     }
   }
   return out;
@@ -80,7 +74,6 @@ function download(url: string, dest: string, redirects = 5): Promise<boolean> {
           try {
             unlinkSync(dest);
           } catch {
-            /* ignore */
           }
           resolve(false);
         }
@@ -141,7 +134,6 @@ async function downloadAndRun(): Promise<InstallResult> {
     }
   }
 
-  // Nothing verified — open the official page so the user can download manually.
   await shell.openExternal(OFFICIAL_PAGE);
   return {
     ok: true,

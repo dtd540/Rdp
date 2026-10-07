@@ -9,7 +9,6 @@ describe('browser address bar', () => {
   });
 
   it('treats localhost, loopback and bare IPs as http', () => {
-    // A dev server does not speak https; forcing it would make every local preview fail.
     expect(normalizeUrl('localhost:5199')).toBe('http://localhost:5199');
     expect(normalizeUrl('127.0.0.1:63215/@fs/app.html')).toBe('http://127.0.0.1:63215/@fs/app.html');
     expect(normalizeUrl('192.168.1.10')).toBe('http://192.168.1.10');
@@ -29,10 +28,7 @@ describe('browser address bar', () => {
 
   it('searches for anything that is not a URL', () => {
     expect(normalizeUrl('vrchat avatar worlds')).toBe(`${SEARCH}vrchat%20avatar%20worlds`);
-    // A version number is not a host, unlike a loose "contains a dot" test would assume.
     expect(normalizeUrl('3.5')).toBe(`${SEARCH}3.5`);
-    // "notes.txt" does look like host.tld and is treated as one — the same call NEXBROWSE
-    // makes, kept deliberately so the two browsers agree on what is a URL.
     expect(normalizeUrl('notes.txt')).toBe('https://notes.txt');
   });
 

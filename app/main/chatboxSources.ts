@@ -13,7 +13,6 @@ let cachedAt = 0;
 let cachedFor = '';
 let pending: { key: string; promise: Promise<WindowsChatboxSources> } | null = null;
 
-/** Reads metadata only. Never reads the audio stream, lyrics, account or process command lines. */
 export async function windowsChatboxSources(wanted: { windowTitle?: boolean; media?: boolean; battery?: boolean; network?: boolean } = {}): Promise<WindowsChatboxSources> {
   if (process.platform !== 'win32') return EMPTY;
   const key = JSON.stringify({ windowTitle: wanted.windowTitle === true, media: wanted.media === true, battery: wanted.battery === true, network: wanted.network === true });
@@ -74,9 +73,6 @@ $result | ConvertTo-Json -Compress -Depth 4
   const promise = new Promise<WindowsChatboxSources>((resolve) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 6000, maxBuffer: 64 * 1024 }, (_error, stdout) => {
     let result: WindowsChatboxSources = EMPTY;
     try {
-      /* PowerShell emits an unassigned .NET return value (for example the boolean from
-         Task.Wait) onto stdout ahead of the payload, which would make a strict JSON.parse
-         throw and silently discard every field. Narrow to the JSON object instead. */
       const parsed = JSON.parse(stdout.slice(Math.max(0, stdout.indexOf('{')), stdout.lastIndexOf('}') + 1)) as { windowTitle?: unknown; battery?: { percent?: unknown; charging?: unknown } | null; media?: { title?: unknown; artist?: unknown; status?: unknown; source?: unknown; positionSeconds?: unknown; durationSeconds?: unknown } | null; receiveBytesPerSecond?: unknown; sendBytesPerSecond?: unknown };
       const battery = parsed.battery && Number.isFinite(parsed.battery.percent) ? { percent: Math.max(0, Math.min(100, Number(parsed.battery.percent))), charging: parsed.battery.charging === true } : null;
       const rawMedia = parsed.media;
@@ -89,7 +85,7 @@ $result | ConvertTo-Json -Compress -Depth 4
         durationSeconds: Number.isFinite(rawMedia.durationSeconds) ? Number(rawMedia.durationSeconds) : undefined
       } : null;
       result = { windowTitle: typeof parsed.windowTitle === 'string' ? parsed.windowTitle.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 160) : null, battery, media, receiveBytesPerSecond: Number.isFinite(parsed.receiveBytesPerSecond) ? Math.max(0, Number(parsed.receiveBytesPerSecond)) : null, sendBytesPerSecond: Number.isFinite(parsed.sendBytesPerSecond) ? Math.max(0, Number(parsed.sendBytesPerSecond)) : null };
-    } catch { /* PowerShell absent/unavailable: return explicit unavailable values. */ }
+    } catch { }
     cached = result;
     cachedFor = key;
     cachedAt = Date.now();

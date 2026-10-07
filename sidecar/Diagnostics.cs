@@ -2,11 +2,6 @@ using NAudio.Wave;
 
 namespace AudioBridge.Sidecar;
 
-/// <summary>
-/// Renders a test tone to an endpoint. Used by the wizard's diagnostics and as a
-/// guaranteed-live audio session when verifying per-app routing (Windows refuses
-/// SetPersistedDefaultAudioEndpoint for processes that aren't rendering audio).
-/// </summary>
 public static class Diagnostics
 {
     private static readonly object Gate = new();
@@ -49,13 +44,12 @@ public static class Diagnostics
 
     private static void StopLocked()
     {
-        try { _out?.Stop(); } catch { /* ignore */ }
-        try { _out?.Dispose(); } catch { /* ignore */ }
+        try { _out?.Stop(); } catch { }
+        try { _out?.Dispose(); } catch { }
         _out = null;
         _gen = null;
     }
 
-    /// <summary>440 Hz sine at -12 dBFS with 30 ms fade-in/out, looping until duration elapses.</summary>
     private sealed class SignalGeneratorProvider : ISampleProvider
     {
         private readonly WaveFormat _format;
@@ -78,10 +72,10 @@ public static class Diagnostics
             if ((DateTime.UtcNow - _start).TotalSeconds >= _durationSec || _pos >= _totalSamples)
             {
                 Array.Clear(buffer, offset, count);
-                return count; // keep stream alive until WasapiOut is stopped by caller/timeout
+                return count;
             }
             var freq = 440.0;
-            var amp = 0.25f; // ≈ -12 dBFS
+            var amp = 0.25f;
             for (var i = 0; i < count; i++)
             {
                 var t = (double)(_pos + i) / _format.SampleRate;

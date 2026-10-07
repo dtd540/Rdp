@@ -1,12 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-/* Guards the bug class behind "some things aren't blending in": `button` and `select` had a
-   dark base appearance but `input` did not, so every bare input fell back to Chromium's white
-   text-field styling. Any control without a top-level dark surface rule is a bug. */
 const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-/** Split a selector list on commas that are not nested inside `:where()`/`:not()` parens. */
 function selectors(list: string): string[] {
   const out: string[] = [];
   let depth = 0;
@@ -28,7 +24,6 @@ const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .map((match) => ({ selector: match[1].trim(), body: match[2] }))
   .filter((rule) => rule.selector && !rule.selector.startsWith('@'));
 
-/** A top-level rule targets the element itself rather than a descendant of another class. */
 function isTopLevelFor(selector: string, element: string): boolean {
   const compound = selector.split(/[\s>+~]/)[0];
   return compound === element || compound.startsWith(`${element}:`) || compound.startsWith(`${element}[`);

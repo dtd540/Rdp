@@ -2,7 +2,6 @@ import { renderChatTemplate, type ChatContext, type ChatTemplate } from './chatb
 import { validateChatText } from './gaming';
 import { normaliseChatIntegrationOptions, normaliseChatIntegrations, normaliseLineSeparator, normaliseMessageFrame, normaliseBorderStyle, type ChatBorderStyleId, type ChatIntegrationSetting, type ChatIntegrationOptions, type ChatLineSeparator, type ChatMessageFrameId } from './chatboxIntegrations';
 
-/** Schema marker. Bump when a persisted field's meaning changes so load can repair old blobs. */
 export const SETTINGS_VERSION = 2;
 
 export interface ChatboxSettings {
@@ -34,10 +33,6 @@ export const DEFAULT_CHATBOX_SETTINGS: ChatboxSettings = {
 };
 export function normaliseChatboxSettings(raw: unknown): ChatboxSettings {
   const value = raw && typeof raw === 'object' ? raw as Partial<ChatboxSettings> : {};
-  /* Settings written before v2 recorded showEmoji:false for every integration: the old
-     normaliser coerced a missing flag to false and the client then persisted that result on
-     mount, so a stored false from a pre-v2 blob is corruption rather than a choice. v2 blobs
-     carry their version, so a deliberate "no emoji" set after this point stays off. */
   const integrations = normaliseChatIntegrations(value.integrations);
   const poisonedEmojiFlags = value.version !== SETTINGS_VERSION;
   return {
@@ -60,7 +55,6 @@ export function normaliseChatboxSettings(raw: unknown): ChatboxSettings {
   };
 }
 
-/** Validate actual expanded cycle entries, independently of the editor draft. */
 export function cycleOutputs(templates: ChatTemplate[], context: ChatContext): Array<{ id: string; name: string; text: string }> {
   const cycle = templates.filter((template) => template.cycle);
   if (!cycle.length) throw new Error('Select at least one saved template for the cycle.');

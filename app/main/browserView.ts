@@ -1,17 +1,5 @@
 import { BrowserWindow, WebContentsView } from 'electron';
 
-/**
- * Native browser surfaces for the Browser tab.
- *
- * This replaces the deprecated Electron <webview> tag. Each tab is a WebContentsView
- * owned by the main process: the renderer only sends intents over the existing
- * `bridge:op` channel and receives state back on `bridge:event`, so the page can never
- * reach the renderer's DOM or its preload.
- *
- * The view is a sibling of the renderer inside the window's content view, so it always
- * paints above the app's own UI. The renderer therefore reports the rectangle it has
- * reserved for the page and the view is positioned into exactly that hole.
- */
 
 export const BROWSER_PARTITION = 'persist:browser';
 
@@ -28,7 +16,6 @@ interface BrowserTab {
   url: string;
 }
 
-/** What the renderer needs to know about one live tab. */
 export interface BrowserTabState {
   id: string;
   url: string;
@@ -44,7 +31,6 @@ let activeId: string | null = null;
 let bounds: Bounds | null = null;
 let attached = false;
 
-/** Only http(s) may be loaded, so a page cannot reach file:// or a custom protocol. */
 function isWebUrl(url: string): boolean {
   try {
     const protocol = new URL(url).protocol;
@@ -74,7 +60,6 @@ function summarize(id: string): BrowserTabState | null {
 
 function syncState(id: string): void {
   const state = summarize(id);
-  // `state` already carries the id, so spreading it supplies it once.
   if (state) publish({ type: 'state', ...state });
 }
 
@@ -82,8 +67,6 @@ function position(): void {
   if (!bounds || !activeId) return;
   const tab = tabs.get(activeId);
   if (!tab || tab.view.webContents.isDestroyed()) return;
-  // A zero/negative size would make the view throw, and happens whenever the tab is
-  // hidden mid-transition; keep it out of the way instead.
   const width = Math.max(0, Math.round(bounds.width));
   const height = Math.max(0, Math.round(bounds.height));
   tab.view.setBounds({ x: Math.round(bounds.x), y: Math.round(bounds.y), width, height });
@@ -114,8 +97,6 @@ function create(id: string, url: string): BrowserTab {
   const target = isWebUrl(url) ? url : 'about:blank';
   const view = new WebContentsView({
     webPreferences: {
-      // The browser tab is a general-purpose web surface: it may load any http(s) site,
-      // but it stays sandboxed, with no preload and no node access.
       partition: BROWSER_PARTITION,
       sandbox: true,
       contextIsolation: true,
@@ -131,7 +112,6 @@ function create(id: string, url: string): BrowserTab {
   const tab: BrowserTab = { id, view, url: target };
 
   contents.setWindowOpenHandler(({ url: target2 }) => {
-    // Nexus keeps pop-ups inside the tab; never spawn a bare OS window.
     if (isWebUrl(target2)) void contents.loadURL(target2);
     return { action: 'deny' };
   });
@@ -155,7 +135,6 @@ function create(id: string, url: string): BrowserTab {
   contents.on('page-title-updated', (_event, title) => publish({ id, type: 'title', title }));
   contents.on('found-in-page', (_event, result) => publish({ id, type: 'found', active: result.activeMatchOrdinal ?? 0, total: result.matches ?? 0 }));
   contents.on('did-fail-load', (_event, code, description, validatedURL, isMainFrame) => {
-    // Sub-resource failures and aborted loads are routine; only a failed main frame matters.
     if (!isMainFrame || code === -3) return;
     publish({ id, type: 'fail', detail: description, url: validatedURL });
   });
@@ -170,10 +149,7 @@ export function initializeBrowserViews(win: () => BrowserWindow | null): void {
   getWindow = win;
 }
 
-/* The browser partition denies every permission request; that handler is registered in
-   index.ts alongside the Discord one, since a partition can only be configured once. */
 
-/** Reconcile the renderer's tab list with the live views, then focus the active one. */
 export function syncBrowserTabs(payload: { tabs?: Array<{ id?: unknown; url?: unknown }>; activeId?: unknown }): { tabs: BrowserTabState[] } {
   const wanted: Array<{ id: string; url: string }> = [];
   for (const entry of Array.isArray(payload.tabs) ? payload.tabs : []) {
@@ -195,7 +171,6 @@ export function syncBrowserTabs(payload: { tabs?: Array<{ id?: unknown; url?: un
       create(id, url);
       continue;
     }
-    // The renderer restores a persisted URL that the page has not caught up to yet.
     if (url !== existing.url && url !== existing.view.webContents.getURL()) {
       existing.url = url;
       if (isWebUrl(url)) void existing.view.webContents.loadURL(url);

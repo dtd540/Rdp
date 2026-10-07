@@ -117,7 +117,6 @@ describe('browser mock bridge (preview mode)', () => {
   });
 
   it('says the preview cannot open a native file dialog instead of throwing', async () => {
-    // No DOM in the test env, which is the same guard the preview falls back on.
     const picked = await bridge.op('pickBackgroundImage');
     expect(picked.ok).toBe(false);
     expect(picked.detail).toMatch(/desktop app/i);

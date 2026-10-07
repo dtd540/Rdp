@@ -16,7 +16,6 @@ const GamesHeading: FC = () => (
 );
 
 type Sort = 'recent' | 'name' | 'size';
-/** The library filter selects titles not installed on this PC. */
 type Filter = 'all' | 'installed' | 'library' | 'favourites';
 
 function formatSize(bytes: number): string {
@@ -36,7 +35,6 @@ function formatPlayed(unixSeconds: number): string {
   return `Played ${Math.floor(days / 365)} years ago`;
 }
 
-/** Stable colour per title so a missing cover still looks deliberate. */
 function placeholderStyle(name: string): React.CSSProperties {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
@@ -59,13 +57,6 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'favourites', label: 'Favourites' }
 ];
 
-/**
- * Games tab — every Steam title this account owns.
- *
- * The main process does all the reading (registry, library folders, manifests,
- * plus a cached store lookup for what is owned but not installed); this only
- * renders.
- */
 export const GamesPanel: FC = () => {
   const preferences = useGamerPreferences();
   const [selected, setSelected] = useState<SteamGame | null>(null);
@@ -108,7 +99,6 @@ export const GamesPanel: FC = () => {
     }
   };
 
-  // Scan once on open; the user can rescan after installing something new.
   useEffect(() => {
     void scan();
   }, []);
@@ -131,7 +121,6 @@ export const GamesPanel: FC = () => {
   }, [games, filter, query, preferences.favouriteGames]);
 
   const sorted = useMemo(() => {
-    // Library-only titles have no play history, so they sort by name there.
     if (sort === 'name') return visible.sort((a, b) => a.name.localeCompare(b.name));
     if (sort === 'size') return visible.sort((a, b) => b.sizeOnDisk - a.sizeOnDisk);
     return visible.sort(

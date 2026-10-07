@@ -27,7 +27,6 @@ const bridge = {
     install: (): Promise<boolean> => ipcRenderer.invoke('updates:install')
   },
 
-  /** Subscribe to sidecar and updater events (meter.update, updates:status, log, sidecar, …). */
   on: (cb: (method: string, params: unknown) => void): Unsub => {
     const listener = (_e: Electron.IpcRendererEvent, method: string, params: unknown) =>
       cb(method, params);

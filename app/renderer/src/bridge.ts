@@ -46,7 +46,6 @@ export interface Bridge {
 declare global {
   interface Window {
     bridge: Bridge;
-    /** Freebuff can expose saved desktop data, but cannot create Electron webviews. */
     __freebuffPreview?: boolean;
   }
 }
@@ -56,16 +55,9 @@ const injected: Bridge | undefined =
 
 export const bridge: Bridge = injected ?? createBrowserMock();
 
-/** True when running inside the real Electron app (preloaded bridge present). */
 export const isElectron = Boolean(injected);
 export const hasNativeWebviews = isElectron && !window.__freebuffPreview;
 
-/**
- * DEV-ONLY browser mock (no Electron preload). Lets the UI be exercised in a
- * plain browser / live preview: returns realistic simulated audio hardware,
- * simulates VoiceMeeter + routing RPCs, and pushes fake meter ticks so the
- * meters animate. Never used inside the packaged app.
- */
 function createBrowserMock(): Bridge {
   const endpoints: AudioEndpointInfo[] = [
     { id: '{0.0.0.00000000}.{mock-speakers}', name: 'Speakers (Realtek High Definition Audio)', direction: 'render', isDefault: true },
@@ -86,8 +78,6 @@ function createBrowserMock(): Bridge {
     backgroundPath: null
   };
 
-  // The preview can't open a native dialog, so it borrows a file input. Same
-  // outcome as the real picker: a data URL the UI can paint.
   let mockBackground: BackgroundImage | null = null;
 
   async function pickFileAsDataUrl(): Promise<{ name: string; url: string }> {
@@ -105,8 +95,6 @@ function createBrowserMock(): Bridge {
         window.removeEventListener('focus', onRefocus);
         input.remove();
       };
-      // Backing out of the picker fires `cancel` in current Chromium, but older
-      // engines fire nothing at all — without this the caller would await forever.
       const onRefocus = (): void => {
         window.setTimeout(() => {
           if (input.files?.length) return;
@@ -147,13 +135,11 @@ function createBrowserMock(): Bridge {
   const listeners = new Set<(method: string, params: unknown) => void>();
   let meterTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Animate the meters like real audio until something asks to stop them. */
   function startMeters(): void {
     if (meterTimer) return;
     const levels = new Map<string, number>(endpoints.map((e) => [e.id, -60]));
     meterTimer = setInterval(() => {
       for (const ep of endpoints) {
-        // Random-walk with occasional louder bursts (speech on the mic, music on the strip).
         const idle = ep.direction === 'capture' && !/USB/.test(ep.name) ? -60 : -30;
         const prev = levels.get(ep.id) ?? -60;
         const target = Math.random() < 0.08 ? -12 + Math.random() * 8 : idle + Math.random() * 10;
@@ -271,7 +257,6 @@ function createBrowserMock(): Bridge {
         try {
           window.open(arg, '_blank', 'noopener');
         } catch {
-          /* ignore */
         }
       }
       if (op === 'pickBackgroundImage') {
@@ -315,7 +300,6 @@ function createBrowserMock(): Bridge {
   };
 }
 
-/** Type-safe sidecar call helper. */
 export async function rpc<T>(method: string, params?: unknown): Promise<T> {
   return (await bridge.call(method, params)) as T;
 }
@@ -328,7 +312,6 @@ export async function safeRpc<T>(method: string, params?: unknown): Promise<T | 
   }
 }
 
-/** Endpoints for the three wizard/dashboard meters + music routing. */
 export function pickMusicEndpoint(eps: AudioEndpointInfo[]): AudioEndpointInfo | undefined {
   const render = eps.filter((e) => e.direction === 'render');
   return (

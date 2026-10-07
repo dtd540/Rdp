@@ -15,7 +15,6 @@ import {
   scanSteamLibrary
 } from './steam';
 
-/** Real-shaped AppState block from a Steam appmanifest_*.acf. */
 const MANIFEST = `"AppState"
 {
 	"appid"		"431960"
@@ -38,7 +37,6 @@ const MANIFEST = `"AppState"
 }
 `;
 
-/** libraryfolders.vdf mixes numbered entries with non-entry keys like contentid. */
 function libraryFoldersVdf(steamPath: string, otherPath: string): string {
   const escape = (p: string) => p.replace(/\\/g, '\\\\');
   return `"libraryfolders"
@@ -73,7 +71,6 @@ function libraryFoldersVdf(steamPath: string, otherPath: string): string {
 let steamRoot = '';
 let secondLibrary = '';
 let cacheDir = '';
-/** Scanned lazily — steamRoot only exists once beforeAll has run. */
 const scanned = () => scanSteamGames(steamRoot);
 
 beforeAll(() => {
@@ -191,7 +188,6 @@ describe('libraryApps', () => {
 describe('scanSteamLibrary', () => {
   const store = {
     '1172470': { success: true, data: { name: 'Deep Rock Galactic', type: 'game' } },
-    // Not a game — this is the games list, not an entitlement dump.
     '999999': { success: true, data: { name: 'Some DLC Pack', type: 'dlc' } }
   };
 
