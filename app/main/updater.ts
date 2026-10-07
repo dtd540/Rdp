@@ -87,7 +87,10 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
 
 export function installDownloadedUpdate(): boolean {
   if (!downloadedVersion) return false;
-  autoUpdater.quitAndInstall(false, true);
+  // The first argument is isSilent: it makes electron-updater pass /S to the NSIS
+  // installer, so an update finishes on its own instead of reopening the wizard. The
+  // second relaunches the app afterwards.
+  autoUpdater.quitAndInstall(true, true);
   return true;
 }
 
