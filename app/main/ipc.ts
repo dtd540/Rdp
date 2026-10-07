@@ -8,7 +8,8 @@ import { getState, setState } from './state';
 import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground } from './background';
 import { findSteamPath, installUrl, launchUrl, scanSteamGames, scanSteamLibraryResult } from './steam';
 import { appUptimeSeconds, pcSnapshot, recentVrchatWorlds, sendChatbox, vrchatIsRunning, vrchatLogFolder } from './gaming';
-import { windowsChatboxSources } from './chatboxSources';
+import { chatboxSourcePayload, windowsChatboxSources } from './chatboxSources';
+import { sampleNetworkRates, UNKNOWN_NETWORK_RATES } from './netStats';
 import { chatboxSender } from './osc';
 import { parseWorldLink } from '@shared/gaming';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
@@ -67,11 +68,13 @@ export function registerIpc(ctx: IpcContext): void {
       case 'chatboxContext': {
         try {
           const requested = JSON.parse(arg ?? '{}') as { windowTitle?: unknown; media?: unknown; battery?: unknown; network?: unknown; currentWorld?: unknown };
-          const sources = await windowsChatboxSources({ windowTitle: requested.windowTitle === true, media: requested.media === true, battery: requested.battery === true, network: requested.network === true });
+          const wanted = { windowTitle: requested.windowTitle === true, media: requested.media === true, battery: requested.battery === true, network: requested.network === true };
+          const sources = await windowsChatboxSources(wanted);
+          const rates = wanted.network ? await sampleNetworkRates(sidecar) : UNKNOWN_NETWORK_RATES;
           const pc = requested.currentWorld === true ? await pcSnapshot() : undefined;
           const vrchatRunning = pc ? vrchatIsRunning(pc) : false;
           const latestWorld = vrchatRunning ? recentVrchatWorlds().worlds[0]?.name ?? null : null;
-          return { ok: true, ...sources, ...(requested.currentWorld === true ? { currentWorld: latestWorld, vrchatRunning } : {}), appUptimeSeconds: appUptimeSeconds() } satisfies BridgeOpResult;
+          return { ok: true, ...chatboxSourcePayload(wanted, sources, rates), ...(requested.currentWorld === true ? { currentWorld: latestWorld, vrchatRunning } : {}), appUptimeSeconds: appUptimeSeconds() } satisfies BridgeOpResult;
         } catch (error) {
           return { ok: false, detail: error instanceof Error ? error.message : String(error), appUptimeSeconds: appUptimeSeconds() } satisfies BridgeOpResult;
         }

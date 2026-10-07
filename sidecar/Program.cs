@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Text.Json;
 
 namespace AudioBridge.Sidecar;
@@ -114,6 +115,8 @@ public static class Program
 
         "route.app" => RouteApp(parms),
         "route.settingsDeepLink" => OpenSettings(),
+
+        "net.stats" => NetStats(),
 
         "diag.playTone" => Diagnostics.PlayTone(
             Rpc.Param<string>(parms, "endpointName"),
@@ -349,6 +352,43 @@ public static class Program
             }
             return new { ok = false, method = "manual", detail = lastError ?? "routing failed" };
         }
+    }
+
+    private static readonly string[] VirtualLinkMarkers =
+    {
+        "loopback", "teredo", "isatap", "vpn", "warp", "tunnel", "virtual",
+        "hyper-v", "vethernet", "pseudo", "radmin", "zerotier", "wan miniport"
+    };
+
+    private static bool IsPhysicalLink(NetworkInterface nic)
+    {
+        if (nic.OperationalStatus != OperationalStatus.Up) return false;
+        if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) return false;
+        if (nic.NetworkInterfaceType == NetworkInterfaceType.Tunnel) return false;
+        var label = (nic.Name + " " + nic.Description).ToLowerInvariant();
+        foreach (var marker in VirtualLinkMarkers)
+            if (label.Contains(marker)) return false;
+        return true;
+    }
+
+    private static object NetStats()
+    {
+        long received = 0;
+        long sent = 0;
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (!IsPhysicalLink(nic)) continue;
+            try
+            {
+                var stats = nic.GetIPStatistics();
+                received += stats.BytesReceived;
+                sent += stats.BytesSent;
+            }
+            catch
+            {
+            }
+        }
+        return new { receivedBytes = received, sentBytes = sent, sampledAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
     }
 
     private static object OpenSettings()

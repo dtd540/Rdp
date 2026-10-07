@@ -33,7 +33,7 @@ export const CHAT_INTEGRATIONS: ChatIntegrationDefinition[] = [
   { id: 'current_time', label: 'Current time', description: 'Show the current time on this PC in the chatbox.', source: 'local', defaultEnabled: false, emoji: '🕐', format: '{emoji} {value}' },
   { id: 'media_status', label: 'Media status', description: 'Show the title, artist, and playback progress of your current media session when available.', source: 'local', defaultEnabled: false, emoji: '🎵', format: '{emoji} {value}' },
   { id: 'lyricify_lyrics', label: 'Lyricify lyrics', description: 'Show the live synced lyric line for the song you are playing. No lyrics provider is connected here, so this stays unavailable.', source: 'external', defaultEnabled: false, emoji: '🎤', format: '{emoji} {value}' },
-  { id: 'component_and_network_stats', label: 'Component & network stats', description: 'Show memory used by this app as a percentage of available memory.', source: 'local', defaultEnabled: false, emoji: '📊', format: '{emoji} {value}' },
+  { id: 'component_and_network_stats', label: 'Component & network stats', description: 'Show how much memory this PC has in use and its current network throughput across active adapters.', source: 'local', defaultEnabled: false, emoji: '📊', format: '{emoji} {value}' },
   { id: 'system_stats', label: 'System stats', description: 'Show live CPU and memory usage of your PC.', source: 'local', defaultEnabled: false, emoji: '💻', format: '{emoji} {value}' },
   { id: 'current_world', label: 'Current world', description: 'Show the VRChat world you are currently in. Requires VRChat to be running and a recent local log to have a current world name.', source: 'local', defaultEnabled: false, emoji: '🌍', format: '{emoji} {value}' },
   { id: 'instance_players', label: 'Instance players', description: 'Show how many players are in your current VRChat instance. Live instance occupancy is not exposed by the local reader, so this stays unavailable.', source: 'external', defaultEnabled: false, emoji: '👥', format: '{emoji} {value}' },
@@ -53,6 +53,19 @@ export interface ChatIntegrationSetting {
 export const DEFAULT_CHAT_INTEGRATIONS: ChatIntegrationSetting[] = CHAT_INTEGRATIONS.map(({ id, defaultEnabled, emoji, format }) => ({ id, enabled: defaultEnabled, emoji, format, showEmoji: true }));
 
 const definitions = new Map(CHAT_INTEGRATIONS.map((item) => [item.id, item]));
+
+export const SOURCE_BACKED_INTEGRATIONS: ChatIntegrationId[] = ['window_activity', 'media_status', 'pc_battery', 'component_and_network_stats'];
+
+export function chatSourceRequest(settings: ChatIntegrationSetting[]): { windowTitle: boolean; media: boolean; battery: boolean; network: boolean; currentWorld: boolean } {
+  const enabled = (id: ChatIntegrationId) => settings.some((item) => item.id === id && item.enabled);
+  return {
+    windowTitle: enabled('window_activity'),
+    media: enabled('media_status'),
+    battery: enabled('pc_battery'),
+    network: enabled('component_and_network_stats'),
+    currentWorld: false
+  };
+}
 
 export function normaliseChatIntegrations(raw: unknown): ChatIntegrationSetting[] {
   if (!Array.isArray(raw)) return DEFAULT_CHAT_INTEGRATIONS.map((item) => ({ ...item }));
@@ -215,6 +228,19 @@ export function composeCycleIntegrations(
   });
 }
 
+export function formatBytesPerSecond(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return `${Math.round(bytes)} B/s`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB/s`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function networkThroughput(receive: number | null | undefined, send: number | null | undefined): string {
+  const down = formatBytesPerSecond(receive);
+  const up = formatBytesPerSecond(send);
+  return [down ? `↓ ${down}` : '', up ? `↑ ${up}` : ''].filter(Boolean).join(' ');
+}
+
 export function formatUptime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '';
   const total = Math.floor(seconds);
@@ -330,7 +356,10 @@ export function chatIntegrationValues(input: {
     lyricify_lyrics: input.lyricifyLyrics ?? '',
     app_uptime: input.appUptimeSeconds == null ? '' : (options.uptimePrefixed ? `Up ${formatUptime(input.appUptimeSeconds)}` : formatUptime(input.appUptimeSeconds)),
     system_stats: (Number.isFinite(input.cpuPercent ?? NaN) ? `CPU ${Math.round(input.cpuPercent ?? 0)}%` : '') + (input.memoryTotal != null && input.memoryUsed != null ? ` · RAM ${Math.round((input.memoryUsed / input.memoryTotal) * 100)}%` : ''),
-    component_and_network_stats: input.memoryTotal != null && input.memoryUsed != null ? `Memory ${Math.round((input.memoryUsed / input.memoryTotal) * 100)}% used` : '',
+    component_and_network_stats: [
+      input.memoryTotal != null && input.memoryUsed != null ? `Memory ${Math.round((input.memoryUsed / input.memoryTotal) * 100)}% used` : '',
+      networkThroughput(input.receiveBytesPerSecond, input.sendBytesPerSecond)
+    ].filter(Boolean).join(' · '),
     pc_battery: input.battery ? (options.batteryPrefixed ? `Battery ${input.battery.percent}% ${input.battery.charging ? '⚡' : ''}` : `${input.battery.percent}% ${input.battery.charging ? '⚡' : ''}`) : '',
     media_status: mediaText
   };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBorder, applyMessageFrame, normaliseBorderStyle, composeChatIntegrations, normaliseChatIntegrations, composeCycleIntegrations, chatIntegrationValues, formatUptime, mediaProgressBar, normaliseLineSeparator, CHAT_BORDER_STYLES, CHAT_MESSAGE_FRAMES, CHAT_INTEGRATIONS, DEFAULT_CHAT_INTEGRATIONS, type ChatIntegrationSetting } from './chatboxIntegrations';
+import { applyBorder, applyMessageFrame, normaliseBorderStyle, composeChatIntegrations, normaliseChatIntegrations, composeCycleIntegrations, chatIntegrationValues, chatSourceRequest, formatBytesPerSecond, formatUptime, mediaProgressBar, normaliseLineSeparator, CHAT_BORDER_STYLES, CHAT_MESSAGE_FRAMES, CHAT_INTEGRATIONS, DEFAULT_CHAT_INTEGRATIONS, SOURCE_BACKED_INTEGRATIONS, type ChatIntegrationSetting } from './chatboxIntegrations';
 import { normaliseChatboxSettings, cycleOutputs } from './chatboxSettings';
 import { renderChatTemplate, type ChatTemplate } from './chatbox';
 
@@ -74,6 +74,25 @@ describe('Magic Chatbox integrations', () => {
     expect(formatUptime(45)).toBe('0m');
     expect(formatUptime(90061)).toBe('1d 1h');
     expect(formatUptime(-1)).toBe('');
+  });
+  it('asks the host for network data only when that integration is enabled', () => {
+    expect(chatSourceRequest(DEFAULT_CHAT_INTEGRATIONS)).toEqual({ windowTitle: false, media: false, battery: false, network: false, currentWorld: false });
+    const request = chatSourceRequest(normaliseChatIntegrations([
+      { id: 'media_status', enabled: true },
+      { id: 'component_and_network_stats', enabled: true }
+    ]));
+    expect(request).toEqual({ windowTitle: false, media: true, battery: false, network: true, currentWorld: false });
+    expect(SOURCE_BACKED_INTEGRATIONS).toContain('component_and_network_stats');
+    expect(SOURCE_BACKED_INTEGRATIONS).toContain('pc_battery');
+  });
+  it('reports memory plus network throughput and omits whichever half is missing', () => {
+    const base = { context, activeTab: 'Magic Chatbox' };
+    expect(chatIntegrationValues({ ...base, memoryUsed: 512, memoryTotal: 1024, receiveBytesPerSecond: 1572864, sendBytesPerSecond: 245760 }).component_and_network_stats).toBe('Memory 50% used · ↓ 1.5 MB/s ↑ 240 KB/s');
+    expect(chatIntegrationValues({ ...base, memoryUsed: 512, memoryTotal: 1024 }).component_and_network_stats).toBe('Memory 50% used');
+    expect(chatIntegrationValues({ ...base, receiveBytesPerSecond: 512, sendBytesPerSecond: null }).component_and_network_stats).toBe('↓ 512 B/s');
+    expect(chatIntegrationValues(base).component_and_network_stats).toBe('');
+    expect(formatBytesPerSecond(-5)).toBe('');
+    expect(formatBytesPerSecond(Number.NaN)).toBe('');
   });
   it('orders enabled items, omits unavailable data, sanitises hostile controls, and leaves validation to caller', () => {
     const settings = normaliseChatIntegrations([

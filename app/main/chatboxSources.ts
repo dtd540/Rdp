@@ -1,31 +1,48 @@
 import { execFile } from 'child_process';
+import type { NetworkRates } from './netStats';
 export interface WindowsChatboxSources {
   windowTitle: string | null;
   battery: { percent: number; charging: boolean } | null;
   media: { title: string; artist?: string; status: string; source?: string; positionSeconds?: number; durationSeconds?: number } | null;
-  receiveBytesPerSecond: number | null;
-  sendBytesPerSecond: number | null;
 }
 
-const EMPTY: WindowsChatboxSources = { windowTitle: null, battery: null, media: null, receiveBytesPerSecond: null, sendBytesPerSecond: null };
+const EMPTY: WindowsChatboxSources = { windowTitle: null, battery: null, media: null };
 let cached: WindowsChatboxSources | null = null;
 let cachedAt = 0;
 let cachedFor = '';
 let pending: { key: string; promise: Promise<WindowsChatboxSources> } | null = null;
 
-export async function windowsChatboxSources(wanted: { windowTitle?: boolean; media?: boolean; battery?: boolean; network?: boolean } = {}): Promise<WindowsChatboxSources> {
+export interface ChatboxSourceRequest {
+  windowTitle?: boolean;
+  media?: boolean;
+  battery?: boolean;
+  network?: boolean;
+}
+
+export function chatboxSourcePayload(wanted: ChatboxSourceRequest, sources: WindowsChatboxSources, rates: NetworkRates): Partial<WindowsChatboxSources & NetworkRates> {
+  const payload: Partial<WindowsChatboxSources & NetworkRates> = {};
+  if (wanted.windowTitle === true) payload.windowTitle = sources.windowTitle;
+  if (wanted.media === true) payload.media = sources.media;
+  if (wanted.battery === true) payload.battery = sources.battery;
+  if (wanted.network === true) {
+    payload.receiveBytesPerSecond = rates.receiveBytesPerSecond;
+    payload.sendBytesPerSecond = rates.sendBytesPerSecond;
+  }
+  return payload;
+}
+
+export async function windowsChatboxSources(wanted: ChatboxSourceRequest = {}): Promise<WindowsChatboxSources> {
   if (process.platform !== 'win32') return EMPTY;
-  const key = JSON.stringify({ windowTitle: wanted.windowTitle === true, media: wanted.media === true, battery: wanted.battery === true, network: wanted.network === true });
+  const key = JSON.stringify({ windowTitle: wanted.windowTitle === true, media: wanted.media === true, battery: wanted.battery === true });
   if (cached && cachedFor === key && Date.now() - cachedAt < 8000) return cached;
   if (pending?.key === key) return pending.promise;
   const script = String.raw`
 $WantWindow = $${wanted.windowTitle === true ? 'true' : 'false'}
 $WantMedia = $${wanted.media === true ? 'true' : 'false'}
 $WantBattery = $${wanted.battery === true ? 'true' : 'false'}
-$WantNetwork = $${wanted.network === true ? 'true' : 'false'}
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$result = @{ windowTitle = $null; battery = $null; media = $null; receiveBytesPerSecond = $null; sendBytesPerSecond = $null }
+$result = @{ windowTitle = $null; battery = $null; media = $null }
 if ($WantWindow) { try {
   Add-Type -Namespace Vcmb -Name User32 -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow(); [System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetWindowText(System.IntPtr hWnd, System.Text.StringBuilder text, int count);'
   $hwnd = [Vcmb.User32]::GetForegroundWindow()
@@ -64,16 +81,13 @@ if ($WantMedia) { try {
     }
   }
 } catch {} }
-if ($WantNetwork) { try {
-  $net = @(Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface | Where-Object { $_.Name -notmatch 'Loopback|Teredo|isatap' })
-  if ($net.Count -gt 0) { $result.receiveBytesPerSecond = [double](($net | Measure-Object -Property BytesReceivedPersec -Sum).Sum); $result.sendBytesPerSecond = [double](($net | Measure-Object -Property BytesSentPersec -Sum).Sum) }
-} catch {} }
+
 $result | ConvertTo-Json -Compress -Depth 4
 `;
   const promise = new Promise<WindowsChatboxSources>((resolve) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 6000, maxBuffer: 64 * 1024 }, (_error, stdout) => {
     let result: WindowsChatboxSources = EMPTY;
     try {
-      const parsed = JSON.parse(stdout.slice(Math.max(0, stdout.indexOf('{')), stdout.lastIndexOf('}') + 1)) as { windowTitle?: unknown; battery?: { percent?: unknown; charging?: unknown } | null; media?: { title?: unknown; artist?: unknown; status?: unknown; source?: unknown; positionSeconds?: unknown; durationSeconds?: unknown } | null; receiveBytesPerSecond?: unknown; sendBytesPerSecond?: unknown };
+      const parsed = JSON.parse(stdout.slice(Math.max(0, stdout.indexOf('{')), stdout.lastIndexOf('}') + 1)) as { windowTitle?: unknown; battery?: { percent?: unknown; charging?: unknown } | null; media?: { title?: unknown; artist?: unknown; status?: unknown; source?: unknown; positionSeconds?: unknown; durationSeconds?: unknown } | null };
       const battery = parsed.battery && Number.isFinite(parsed.battery.percent) ? { percent: Math.max(0, Math.min(100, Number(parsed.battery.percent))), charging: parsed.battery.charging === true } : null;
       const rawMedia = parsed.media;
       const media = rawMedia && typeof rawMedia.title === 'string' && rawMedia.title.trim() ? {
@@ -84,7 +98,7 @@ $result | ConvertTo-Json -Compress -Depth 4
         positionSeconds: Number.isFinite(rawMedia.positionSeconds) ? Number(rawMedia.positionSeconds) : undefined,
         durationSeconds: Number.isFinite(rawMedia.durationSeconds) ? Number(rawMedia.durationSeconds) : undefined
       } : null;
-      result = { windowTitle: typeof parsed.windowTitle === 'string' ? parsed.windowTitle.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 160) : null, battery, media, receiveBytesPerSecond: Number.isFinite(parsed.receiveBytesPerSecond) ? Math.max(0, Number(parsed.receiveBytesPerSecond)) : null, sendBytesPerSecond: Number.isFinite(parsed.sendBytesPerSecond) ? Math.max(0, Number(parsed.sendBytesPerSecond)) : null };
+      result = { windowTitle: typeof parsed.windowTitle === 'string' ? parsed.windowTitle.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 160) : null, battery, media };
     } catch { }
     cached = result;
     cachedFor = key;
