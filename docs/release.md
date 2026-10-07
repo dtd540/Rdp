@@ -1,0 +1,73 @@
+# Publishing an update
+
+Releases are driven by a git tag. You do not upload anything by hand, and you do not
+need a GitHub token on this PC — the token lives in the repository as a secret.
+
+## The short version
+
+```bash
+node scripts/publish.mjs patch     # or minor | major | an exact version like 0.3.1
+```
+
+Add `--dry` to see exactly what it would do without changing anything.
+
+That command checks the tree is clean and you are on `main`, confirms the lockfile is
+committed, runs typecheck and the test suite, bumps `package.json`, commits, creates the
+matching tag, and pushes both.
+
+## Why a tag, and not `npm run release` locally
+
+`.github/workflows/publish-release.yml` triggers on a `v*.*.*` tag and runs the whole
+release on a Windows runner: it verifies the tag matches `package.json`, runs `npm ci`,
+typecheck, tests, then `npm run release` with `GH_TOKEN` supplied from the
+`RELEASES_GH_TOKEN` repository secret.
+
+Keeping the version bump and the tag in one step is the point — the workflow **refuses to
+build unless `v<tag>` matches `package.json` exactly**, which is the single most common
+way a release silently produces nothing.
+
+## What actually gets published
+
+- Source code: `dtd540/Rdp` (private)
+- The installer and update feed: `dtd540/Rdp-releases` — **this repository is public**,
+  so a release makes the installer publicly downloadable. Installed copies of the app
+  auto-update from it.
+
+Assets per release: `VRChat-Music-Bridge-Setup-<version>.exe`, its `.blockmap`, and
+`latest.yml`. `latest.yml` is the manifest the auto-updater reads, so it must always
+ship alongside the `.exe`.
+
+## Watching it run
+
+The push prints an Actions URL. The run takes a few minutes (Node, .NET, and an
+electron-builder packaging step). When it finishes, `Rdp-releases` has a new release.
+
+## When it goes wrong
+
+| Symptom | Cause |
+| --- | --- |
+| Workflow fails at "Verify release tag matches package version" | The tag and `package.json` disagree. Delete the tag, fix the version, re-tag. |
+| Workflow fails at "Install dependencies" | `package-lock.json` is missing or out of date. Run `npm install` and commit the lockfile. |
+| Workflow fails at "Build and publish" with an auth error | The `RELEASES_GH_TOKEN` secret is missing, expired, or lacks `contents: write` on `Rdp-releases`. |
+| `npm run release` fails locally with `Access is denied` / `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` | The app is running and locking `release/win-unpacked`. Close it. This only affects local builds; CI is unaffected. |
+| Installed users never see the update | The version did not move, so the updater had nothing newer to offer. |
+
+## Building locally without publishing
+
+```bash
+npm run dist      # same build, no upload
+```
+
+If the app is running, this fails on the locked output folder — close it first. To build
+anyway without disturbing a running copy, point the output elsewhere:
+
+```bash
+npx electron-builder --win --x64 --publish never --config.directories.output="C:/Temp/vmb-build"
+```
+
+## Manual fallback
+
+If CI is unavailable, `npm run release` from a clean `main` does the same work locally,
+but needs `GH_TOKEN` in the environment. Remember the two local gotchas: setting a
+variable only in a shell window is temporary (`setx` makes it persist, and a running
+terminal keeps the old environment), and the app must be closed first.
