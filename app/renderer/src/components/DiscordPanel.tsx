@@ -1,12 +1,12 @@
 import { useRef, useState, type FC, type ReactNode } from 'react';
-import { bridge, isElectron } from '../bridge';
+import { bridge, hasNativeWebviews } from '../bridge';
 
 /** Official Discord mark, used for the Discord tab. */
 export const DiscordMark: FC = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path
       fill="currentColor"
-      d="M20.317 4.369A19.79 19.79 0 0 0 15.885 3c-.2.36-.43.84-.59 1.226a18.27 18.27 0 0 0-5.487 0A12.64 12.64 0 0 0 9.21 3a19.74 19.74 0 0 0-4.435 1.37C1.98 8.573 1.22 12.63 1.6 16.628a19.9 19.9 0 0 0 6.073 3.056c.49-.667.926-1.374 1.3-2.116a12.9 12.9 0 0 0 2.05.983c.375.742.81 1.45 1.3 2.116a19.87 19.87 0 0 0 6.072-3.056c.44-4.63-3.085-12.259ZM8.68 14.17a1.19 1.19 0 0 1-2.43 0c0-1.34.956-2.43 2.43-2.43 1.207 0 2.185 1.1 2.43 2.43Zm6.64 0a1.19 1.19 0 0 1-2.43 0c0-1.34.957-2.43 2.43-2.43 1.207 0 2.185 1.1 2.43 2.43Z"
+      d="M19.73 4.87a18.6 18.6 0 0 0-4.61-1.43l-.57 1.17a17.3 17.3 0 0 0-5.1 0l-.57-1.17a18.6 18.6 0 0 0-4.61 1.43C1.35 9.2.55 13.42.95 17.58a18.8 18.8 0 0 0 5.64 2.85l1.2-1.96-1.76-.84.44-.34a13.25 13.25 0 0 0 11.06 0l.44.34-1.76.84 1.2 1.96a18.8 18.8 0 0 0 5.64-2.85c.47-4.82-.8-8.99-3.32-12.71ZM8.12 14.91c-1.08 0-1.98-.99-1.98-2.21s.87-2.21 1.98-2.21 2 .99 1.98 2.21c0 1.22-.88 2.21-1.98 2.21Zm7.76 0c-1.08 0-1.98-.99-1.98-2.21s.87-2.21 1.98-2.21 2 .99 1.98 2.21c0 1.22-.88 2.21-1.98 2.21Z"
     />
   </svg>
 );
@@ -27,7 +27,7 @@ export const DiscordPanel: FC = () => {
   return (
     <section className="discord-panel" aria-label="Discord">
       <div className="discord-webview-frame">
-        {isElectron ? (
+        {hasNativeWebviews ? (
           <>
             <webview
               ref={webviewRef}

@@ -1,6 +1,6 @@
 # 01 — Install layout
 
-Everything in `C:\Users\dalto\Desktop\VRC-Nexus-1.2.31-TEST`. 855 files, 166 directories.
+Everything in `C:\Users\<you>\Desktop\VRC-Nexus-1.2.31-TEST`. 855 files, 166 directories.
 
 ## Top level
 

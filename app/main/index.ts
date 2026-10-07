@@ -1,4 +1,5 @@
 import { app, BrowserWindow, session } from 'electron';
+import { disposeBrowserViews } from './browserView';
 import path from 'path';
 import { SidecarClient } from './sidecar';
 import { registerIpc } from './ipc';
@@ -9,6 +10,14 @@ import { disposeUpdater } from './updater';
 // Keep audio in the browser process so OUR PID owns our audio sessions —
 // per-app routing (SetPersistedDefaultAudioEndpoint) keys on the session owner.
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
+
+// Dev/preview runs must not collide with an installed copy: the packaged app
+// owns the shared userData profile and its single-instance lock, which made a
+// second (dev) instance quit silently with exit 0. Give unpackaged runs their
+// own profile so both can coexist and dev never overwrites release state.
+if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'vrchat-music-bridge-dev'));
+}
 
 const sidecar = new SidecarClient();
 let win: BrowserWindow | null = null;
@@ -75,6 +84,12 @@ function createWindow(): void {
 
   win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const url = new URL(params.src || 'about:blank');
+
+    // The browser tab no longer attaches a webview — it renders through a main-process
+    // WebContentsView (see browserView.ts), which applies the same sandbox rules there.
+    // The only webview left is the embedded Discord client.
+
+    // The embedded Discord client: discord.com only.
     if (url.protocol !== 'https:' || url.hostname !== 'discord.com') {
       event.preventDefault();
       return;
@@ -93,7 +108,8 @@ function createWindow(): void {
     const allowDiscordNavigation = (event: Electron.Event, url: string) => {
       try {
         const target = new URL(url);
-        if (target.protocol !== 'https:' || target.hostname !== 'discord.com') {
+        const browser = contents.session === session.fromPartition('persist:browser');
+        if (browser ? target.protocol !== 'https:' && target.protocol !== 'http:' : target.protocol !== 'https:' || target.hostname !== 'discord.com') {
           event.preventDefault();
         }
       } catch {
@@ -108,13 +124,24 @@ function createWindow(): void {
     callback(false);
   });
 
+  // Same for the browser tab: no camera, mic, geolocation or notifications.
+  session.fromPartition('persist:browser').setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+
   win.on('closed', () => {
+    // Browser views are children of this window; tear them down with it so a
+    // hidden renderer process cannot outlive the window.
+    disposeBrowserViews();
     win = null;
   });
 }
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  // Windows has already signalled the first instance to focus itself; make the
+  // quit visible in logs instead of exiting silently with no trace.
+  console.error('[app] another instance already holds the single-instance lock — quitting this one.');
   app.quit();
 } else {
   app.on('second-instance', () => trayCtx.showWindow());

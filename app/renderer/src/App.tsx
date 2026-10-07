@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { bridge, type AppState, type BackgroundImage } from './bridge';
 import packageInfo from '../../../package.json';
 import { UpdateBanner } from './components/UpdateBanner';
+import { gamerStorageError, useGamerPreferences } from './gamerStore';
 import { TABS, type TabId } from './tabs';
 
 /**
@@ -15,7 +16,10 @@ const BackgroundLayer: FC<{ url: string | null }> = ({ url }) => {
 
 export const App: FC = () => {
   const [state, setState] = useState<AppState | null>(null);
-  const [activeView, setActiveView] = useState<TabId>('setup');
+  const [activeView, setActiveView] = useState<TabId>('hub');
+  const preferences = useGamerPreferences();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [sidecarUp, setSidecarUp] = useState(true);
   const [vmRunning, setVmRunning] = useState<boolean | null>(null);
@@ -44,6 +48,21 @@ export const App: FC = () => {
     void refreshBackground();
   }, [refreshBackground]);
 
+  useEffect(() => {
+    document.documentElement.dataset.accent = preferences.accent;
+    document.documentElement.classList.toggle('reduce-motion', preferences.reducedMotion);
+  }, [preferences.accent, preferences.reducedMotion]);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault(); setPaletteOpen((value) => !value); setPaletteQuery('');
+      }
+      if (event.key === 'Escape') setPaletteOpen(false);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
+
   // Panels turn translucent only while a background is up (see styles.css).
   useEffect(() => {
     document.documentElement.classList.toggle('has-bg', Boolean(background));
@@ -54,7 +73,7 @@ export const App: FC = () => {
   useEffect(() => {
     void bridge.getState().then((saved) => {
       setState(saved);
-      setActiveView(saved.setupComplete ? 'mixer' : 'setup');
+      setActiveView(saved.setupComplete ? 'hub' : 'setup');
     });
   }, []);
 
@@ -135,6 +154,9 @@ export const App: FC = () => {
       key={tab.id}
       type="button"
       className={`nav-item ${activeView === tab.id ? 'active' : ''}`}
+      title={tab.label}
+      aria-label={tab.label}
+      aria-current={activeView === tab.id ? 'page' : undefined}
       onClick={() => setActiveView(tab.id)}
     >
       <span className="nav-icon">{tab.icon}</span>
@@ -179,6 +201,7 @@ export const App: FC = () => {
             <span className="crumb-slash">/</span>
             <b>{activeTab.label}</b>
           </div>
+          <button className="command-trigger small" onClick={() => { setPaletteOpen(true); setPaletteQuery(''); }}>Jump to… <kbd>Ctrl K</kbd></button>
           <div className="health-group">
             <span className={`health-chip ${vmRunning ? 'is-ok' : vmRunning === false ? 'is-off' : ''}`}>
               <i /> VoiceMeeter {vmRunning === null ? 'checking' : vmRunning ? 'online' : 'offline'}
@@ -190,9 +213,11 @@ export const App: FC = () => {
         </header>
         <div className={`content ${activeTab.immersive ? 'content--immersive' : ''}`}>
           <UpdateBanner />
-          {activeTab.render({ state, patchState, peaks, background: bgInfo, refreshBackground })}
+          {gamerStorageError() && <div className="inline-notice" role="alert">{gamerStorageError()}</div>}
+          {activeTab.render({ state, patchState, peaks, background: bgInfo, refreshBackground, activeTab: activeTab.label })}
         </div>
       </main>
+      {paletteOpen && <div className="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}><section className="command-palette card" role="dialog" aria-modal="true" aria-label="Jump to a tab"><label className="field-label">Jump to a tab<input autoFocus value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} placeholder="Games, Chatbox, VRChat…" onKeyDown={(event) => { if (event.key === 'Enter') { const tab = TABS.find((item) => item.label.toLowerCase().includes(paletteQuery.toLowerCase())); if (tab) { setActiveView(tab.id); setPaletteOpen(false); } } }} /></label><div className="command-list">{TABS.filter((tab) => tab.label.toLowerCase().includes(paletteQuery.toLowerCase())).map((tab) => <button key={tab.id} onClick={() => { setActiveView(tab.id); setPaletteOpen(false); }}><span className="nav-icon">{tab.icon}</span>{tab.label}<span>↵</span></button>)}</div><p className="hint">Enter opens the first result · Escape closes</p><button className="small ghost" onClick={() => setPaletteOpen(false)}>Close</button></section></div>}
     </div>
   );
 };

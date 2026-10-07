@@ -178,22 +178,38 @@ export interface BackgroundImage {
 
 /** Result of a `bridge:op` call. The background ops also hand back the image. */
 export interface BridgeOpResult {
+  pc?: import('./gaming').PcSnapshot;
+  worlds?: import('./gaming').RecentWorld[];
+  windowTitle?: string | null;
+  media?: { title: string; artist?: string; status: string; source?: string; positionSeconds?: number; durationSeconds?: number } | null;
+  battery?: { percent: number; charging: boolean } | null;
+  instanceOccupancy?: number;
+  lyricifyLyrics?: string;
+  receiveBytesPerSecond?: number | null;
+  sendBytesPerSecond?: number | null;
+  appUptimeSeconds?: number;
+  currentWorld?: string | null;
+  vrchatRunning?: boolean;
   ok: boolean;
   detail?: string;
   phase?: string;
   image?: BackgroundImage;
   /** Set by the games ops. */
   games?: SteamGame[];
+  /** Live native browser views after a `browser:sync`, in tab order. */
+  browserTabs?: Array<{ id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean }>;
 }
 
 // ---------- Games ----------
 
-/** One installed Steam title, read off this PC. */
+/** One Steam title, read off this PC. */
 export interface SteamGame {
   /** Steam app id, e.g. `431960`. */
   id: string;
   name: string;
-  /** Absolute install folder; empty when the manifest did not record one. */
+  /** False when the title is in the Steam library but not installed on disk. */
+  installed: boolean;
+  /** Absolute install folder; empty unless installed. */
   installDir: string;
   sizeOnDisk: number;
   /** Unix seconds; 0 means never played. */

@@ -16,7 +16,7 @@ disk that gets wiped, these notes are the recovery path. They are committed to t
 
 | Thing | Path |
 |---|---|
-| Install root | `C:\Users\dalto\Desktop\VRC-Nexus-1.2.31-TEST` |
+| Install root | `C:\Users\<you>\Desktop\VRC-Nexus-1.2.31-TEST` |
 | App code | `resources/app/` (unpacked, not `app.asar`) |
 | Original asar | `resources/app.asar.bak` (20.6 MB) |
 | Chromium profile | `%APPDATA%\vrc-nexus` |

@@ -6,8 +6,13 @@ import type { OpenDialogOptions } from 'electron';
 import type { SidecarClient } from './sidecar';
 import { getState, setState } from './state';
 import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground } from './background';
-import { findSteamPath, launchUrl, scanSteamGames } from './steam';
+import { findSteamPath, installUrl, launchUrl, scanSteamGames, scanSteamLibraryResult } from './steam';
+import { appUptimeSeconds, pcSnapshot, recentVrchatWorlds, sendChatbox, vrchatIsRunning, vrchatLogFolder } from './gaming';
+import { windowsChatboxSources } from './chatboxSources';
+import { chatboxSender } from './osc';
+import { parseWorldLink } from '@shared/gaming';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
+import { browserTabAction, disposeBrowserViews, findInBrowserTab, hideBrowserView, initializeBrowserViews, navigateBrowserTab, setBrowserBounds, stopFindInBrowserTab, syncBrowserTabs, zoomBrowserTab } from './browserView';
 import { checkForUpdates, getUpdateStatus, installDownloadedUpdate, initializeUpdater } from './updater';
 
 export interface IpcContext {
@@ -17,10 +22,20 @@ export interface IpcContext {
 
 const ALLOWED_EXTERNAL = /^(https?:|spotify:|steam:)/i;
 
+/** Ops take one JSON string; a malformed or absent payload must not throw out of the handler. */
+function readJson<T>(arg: string | undefined): T {
+  try {
+    return JSON.parse(arg ?? '{}') as T;
+  } catch {
+    return {} as T;
+  }
+}
+
 export function registerIpc(ctx: IpcContext): void {
   const { sidecar } = ctx;
 
   initializeUpdater(ctx.getWin);
+  initializeBrowserViews(ctx.getWin);
   ipcMain.handle('updates:getStatus', () => getUpdateStatus());
   ipcMain.handle('updates:check', () => checkForUpdates());
   ipcMain.handle('updates:install', () => installDownloadedUpdate());
@@ -47,6 +62,52 @@ export function registerIpc(ctx: IpcContext): void {
 
   ipcMain.handle('bridge:op', async (_e, op: string, arg?: string) => {
     switch (op) {
+      case 'pcSnapshot':
+        return { ok: true, pc: await pcSnapshot() } satisfies BridgeOpResult;
+      case 'recentWorlds':
+        return { ok: true, ...recentVrchatWorlds() } satisfies BridgeOpResult;
+      case 'chatboxContext': {
+        try {
+          const requested = JSON.parse(arg ?? '{}') as { windowTitle?: unknown; media?: unknown; battery?: unknown; network?: unknown; currentWorld?: unknown };
+          const sources = await windowsChatboxSources({ windowTitle: requested.windowTitle === true, media: requested.media === true, battery: requested.battery === true, network: requested.network === true });
+          const pc = requested.currentWorld === true ? await pcSnapshot() : undefined;
+          const vrchatRunning = pc ? vrchatIsRunning(pc) : false;
+          const latestWorld = vrchatRunning ? recentVrchatWorlds().worlds[0]?.name ?? null : null;
+          return { ok: true, ...sources, ...(requested.currentWorld === true ? { currentWorld: latestWorld, vrchatRunning } : {}), appUptimeSeconds: appUptimeSeconds() } satisfies BridgeOpResult;
+        } catch (error) {
+          return { ok: false, detail: error instanceof Error ? error.message : String(error), appUptimeSeconds: appUptimeSeconds() } satisfies BridgeOpResult;
+        }
+      }
+      case 'setChatboxTyping': {
+        try {
+          await chatboxSender.typing(JSON.parse(arg ?? '{}'));
+          return { ok: true, detail: 'Typing indicator packet sent locally; VRChat receipt cannot be confirmed.' };
+        } catch (error) { return { ok: false, detail: error instanceof Error ? error.message : String(error) }; }
+      }
+      case 'sendChatbox': {
+        try {
+          await sendChatbox(JSON.parse(arg ?? '{}'));
+          return { ok: true, detail: 'OSC packet sent to this PC. UDP cannot confirm VRChat received it.' } satisfies BridgeOpResult;
+        } catch (error) {
+          return { ok: false, detail: error instanceof Error ? error.message : String(error) } satisfies BridgeOpResult;
+        }
+      }
+      case 'openVrchatLogs': {
+        const folder = vrchatLogFolder();
+        if (!existsSync(folder)) return { ok: false, detail: 'VRChat log folder was not found.' };
+        const error = await shell.openPath(folder);
+        return { ok: !error, detail: error || undefined };
+      }
+      case 'joinVrchatWorld': {
+        const world = parseWorldLink(arg ?? '');
+        if (!world?.instanceId) return { ok: false, detail: 'A VRChat launch link with an instance id is required to join.' };
+        const query = new URLSearchParams({ id: `${world.worldId}:${world.instanceId}` });
+        await shell.openExternal(`vrchat://launch?${query}`);
+        return { ok: true };
+      }
+      case 'openGameMode':
+        await shell.openExternal('ms-settings:gaming-gamemode');
+        return { ok: true };
       case 'installVoiceMeeter':
         return installVoiceMeeter();
       case 'openSoundSettings':
@@ -90,12 +151,21 @@ export function registerIpc(ctx: IpcContext): void {
         if (!steamPath) {
           return { ok: false, detail: 'Steam was not found on this PC.' } satisfies BridgeOpResult;
         }
-        return { ok: true, games: scanSteamGames(steamPath) } satisfies BridgeOpResult;
+        // Names for owned-but-not-installed titles come from Valve and are
+        // cached on disk, so a rescan is local-only most of the time.
+        const cacheFile = path.join(app.getPath('userData'), 'steam-name-cache.json');
+        return { ok: true, ...await scanSteamLibraryResult(steamPath, cacheFile) } satisfies BridgeOpResult;
       }
       case 'launchGame': {
         // Only a bare Steam app id, so a crafted argument cannot open something else.
         if (!arg || !/^\d{1,12}$/.test(arg)) return { ok: false, detail: 'bad app id' } satisfies BridgeOpResult;
         await shell.openExternal(launchUrl(arg));
+        return { ok: true } satisfies BridgeOpResult;
+      }
+      case 'installGame': {
+        // Owned but not on disk yet — hand the id to Steam's own installer.
+        if (!arg || !/^\d{1,12}$/.test(arg)) return { ok: false, detail: 'bad app id' } satisfies BridgeOpResult;
+        await shell.openExternal(installUrl(arg));
         return { ok: true } satisfies BridgeOpResult;
       }
       case 'openGameFolder': {
@@ -107,9 +177,50 @@ export function registerIpc(ctx: IpcContext): void {
         if (!game?.installDir || !existsSync(game.installDir)) {
           return { ok: false, detail: 'Install folder not found on disk.' } satisfies BridgeOpResult;
         }
-        await shell.openPath(game.installDir);
+        const error = await shell.openPath(game.installDir);
+        return { ok: !error, detail: error || undefined } satisfies BridgeOpResult;
+      }
+      /* ---- Browser tab: one native WebContentsView per tab, owned by main ---- */
+      case 'browser:sync': {
+        const payload = readJson<{ tabs?: Array<{ id?: unknown; url?: unknown }>; activeId?: unknown }>(arg);
+        return { ok: true, browserTabs: syncBrowserTabs(payload).tabs } satisfies BridgeOpResult;
+      }
+      case 'browser:bounds': {
+        const box = readJson<{ x?: number; y?: number; width?: number; height?: number }>(arg);
+        setBrowserBounds({ x: Number(box.x) || 0, y: Number(box.y) || 0, width: Number(box.width) || 0, height: Number(box.height) || 0 });
         return { ok: true } satisfies BridgeOpResult;
       }
+      case 'browser:navigate': {
+        const { id, url } = readJson<{ id?: string; url?: string }>(arg);
+        if (!id || !url) return { ok: false, detail: 'navigate needs a tab id and url' } satisfies BridgeOpResult;
+        return { ok: navigateBrowserTab(id, url) } satisfies BridgeOpResult;
+      }
+      case 'browser:action': {
+        const { id, action } = readJson<{ id?: string; action?: string }>(arg);
+        if (!id || !action) return { ok: false, detail: 'action needs a tab id and action' } satisfies BridgeOpResult;
+        return { ok: browserTabAction(id, action) } satisfies BridgeOpResult;
+      }
+      case 'browser:zoom': {
+        const { id, factor } = readJson<{ id?: string; factor?: number }>(arg);
+        if (!id) return { ok: false, detail: 'zoom needs a tab id' } satisfies BridgeOpResult;
+        return { ok: true, detail: String(zoomBrowserTab(id, Number(factor) || 1)) } satisfies BridgeOpResult;
+      }
+      case 'browser:find': {
+        const { id, text, forward, findNext } = readJson<{ id?: string; text?: string; forward?: boolean; findNext?: boolean }>(arg);
+        if (!id) return { ok: false, detail: 'find needs a tab id' } satisfies BridgeOpResult;
+        return { ok: findInBrowserTab(id, String(text ?? ''), forward !== false, findNext === true) } satisfies BridgeOpResult;
+      }
+      case 'browser:findStop': {
+        const { id, action } = readJson<{ id?: string; action?: string }>(arg);
+        if (id) stopFindInBrowserTab(id, action === 'keepSelection' ? 'keepSelection' : 'clearSelection');
+        return { ok: true } satisfies BridgeOpResult;
+      }
+      case 'browser:hide':
+        hideBrowserView();
+        return { ok: true } satisfies BridgeOpResult;
+      case 'browser:dispose':
+        disposeBrowserViews();
+        return { ok: true } satisfies BridgeOpResult;
       default:
         return { ok: false, detail: `unknown op ${op}` };
     }

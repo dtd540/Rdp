@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import type { AppState, BackgroundImage } from './bridge';
 import { Dashboard } from './components/Dashboard';
 import { DiscordMark, DiscordPanel } from './components/DiscordPanel';
-import { GamesPanel } from './components/GamesPanel';
+import { MagicChatbox } from './components/MagicChatbox';
+import { GamerHub } from './components/GamerHub';
+import { VrchatPanel } from './components/VrchatPanel';
+import { GamesPanel, SteamMark } from './components/GamesPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Wizard } from './components/Wizard';
 
@@ -11,7 +14,7 @@ import { Wizard } from './components/Wizard';
  * instead of edits in three files. Order here is the order in the sidebar.
  */
 
-export type TabId = 'setup' | 'mixer' | 'games' | 'discord' | 'settings';
+export type TabId = 'hub' | 'vrchat' | 'chatbox' | 'setup' | 'mixer' | 'games' | 'browser' | 'discord' | 'settings';
 
 export interface TabContext {
   state: AppState;
@@ -20,6 +23,8 @@ export interface TabContext {
   peaks: Record<string, number>;
   /** Resolved custom background, or null for the default theme. */
   background: BackgroundImage | null;
+  /** Currently active section, for Magic Chatbox context integrations. */
+  activeTab?: string;
   refreshBackground: () => Promise<void>;
 }
 
@@ -46,9 +51,30 @@ const MicrophoneMark = (
 
 export const TABS: TabDef[] = [
   {
+    id: 'hub',
+    label: 'Gamer hub',
+    icon: '🎮',
+    section: 'workspace',
+    render: () => <GamerHub />
+  },
+  {
+    id: 'vrchat',
+    label: 'VRChat tools',
+    icon: '🕶️',
+    section: 'workspace',
+    render: () => <VrchatPanel />
+  },
+  {
+    id: 'chatbox',
+    label: 'Magic Chatbox',
+    icon: '✨',
+    section: 'workspace',
+    render: ({ activeTab }) => <MagicChatbox activeTab={activeTab ?? 'Magic Chatbox'} />
+  },
+  {
     id: 'setup',
     label: 'Setup',
-    icon: '⌘',
+    icon: '⚡',
     section: 'workspace',
     render: ({ state, patchState, peaks }) => (
       <Wizard state={state} setState={patchState} peaks={peaks} />
@@ -57,7 +83,7 @@ export const TABS: TabDef[] = [
   {
     id: 'mixer',
     label: 'Live mixer',
-    icon: MicrophoneMark,
+    icon: '🎙️',
     section: 'workspace',
     render: ({ state, patchState, peaks }) => (
       <Dashboard state={state} setState={patchState} peaks={peaks} />
@@ -66,14 +92,20 @@ export const TABS: TabDef[] = [
   {
     id: 'games',
     label: 'Games',
-    icon: '🎮',
+    icon: '🕹️',
     section: 'workspace',
     render: () => <GamesPanel />
   },
+  // The Browser tab is deliberately NOT registered while its native replacement is finished.
+  // It used to be an Electron <webview>; it is now a main-process WebContentsView that has
+  // never been run (see app/main/browserView.ts and components/BrowserPanel.tsx). Hiding the
+  // entry keeps that unverified surface out of the shipped build without deleting the work.
+  // Re-register it by restoring this entry and the BrowserPanel import above:
+  //   { id: 'browser', label: 'Browser', icon: '🧭', section: 'workspace', immersive: true, render: () => <BrowserPanel /> },
   {
     id: 'discord',
     label: 'Discord',
-    icon: <DiscordMark />,
+    icon: '💬',
     section: 'workspace',
     immersive: true,
     render: () => <DiscordPanel />
@@ -81,7 +113,7 @@ export const TABS: TabDef[] = [
   {
     id: 'settings',
     label: 'Settings',
-    icon: '⚙',
+    icon: '⚙️',
     section: 'system',
     render: ({ background, refreshBackground }) => (
       <SettingsPanel background={background} refreshBackground={refreshBackground} />

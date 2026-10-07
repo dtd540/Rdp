@@ -46,6 +46,8 @@ export interface Bridge {
 declare global {
   interface Window {
     bridge: Bridge;
+    /** Freebuff can expose saved desktop data, but cannot create Electron webviews. */
+    __freebuffPreview?: boolean;
   }
 }
 
@@ -56,6 +58,7 @@ export const bridge: Bridge = injected ?? createBrowserMock();
 
 /** True when running inside the real Electron app (preloaded bridge present). */
 export const isElectron = Boolean(injected);
+export const hasNativeWebviews = isElectron && !window.__freebuffPreview;
 
 /**
  * DEV-ONLY browser mock (no Electron preload). Lets the UI be exercised in a

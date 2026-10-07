@@ -1,4 +1,5 @@
 import { useState, type FC } from 'react';
+import { saveGamerPreferences, useGamerPreferences } from '../gamerStore';
 import { bridge, type BackgroundImage } from '../bridge';
 
 export interface SettingsPanelProps {
@@ -29,6 +30,10 @@ function describe(background: BackgroundImage | null): { title: string; detail: 
  * added survives a restart.
  */
 export const SettingsPanel: FC<SettingsPanelProps> = ({ background, refreshBackground }) => {
+  const preferences = useGamerPreferences();
+  const updatePreferences = (patch: Parameters<typeof saveGamerPreferences>[0]) => {
+    try { saveGamerPreferences(patch); } catch (error) { setNote(`Could not save preferences: ${String(error)}`); }
+  };
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const { title, detail } = describe(background);
@@ -112,10 +117,14 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({ background, refreshBackg
       </div>
 
       <div className="card">
-        <h2>More options will live here</h2>
-        <p className="sub">
-          Toggles and sliders added to this tab show up here and are saved with your setup.
-        </p>
+        <h2>Make it yours</h2>
+        <p className="sub">Appearance preferences are saved on this device.</p>
+        <label className="field-label">Accent colour<select value={preferences.accent} onChange={(event) => updatePreferences({ accent: event.target.value as 'violet' | 'mint' | 'blue' })}><option value="violet">Violet</option><option value="mint">Mint</option><option value="blue">Blue</option></select></label>
+        <label className="check-row"><input type="checkbox" checked={preferences.reducedMotion} onChange={(event) => updatePreferences({ reducedMotion: event.target.checked })} />Reduce animations and transitions</label>
+        <label className="check-row"><input type="checkbox" checked={preferences.compactGames} onChange={(event) => updatePreferences({ compactGames: event.target.checked })} />Compact game cards</label>
+        <div className="divider" />
+        <h2>Keyboard shortcuts</h2><p className="hint"><kbd>Ctrl K</kbd> opens quick navigation. <kbd>Escape</kbd> closes dialogs.</p>
+        <h2>Privacy by default</h2><p className="hint">World bookmarks, notes, favourites and chatbox templates stay local. PC status is read-only. OSC sends only to this PC, and broadcasts never start automatically. Steam artwork and public-library lookups contact Steam.</p>
       </div>
     </div>
   );

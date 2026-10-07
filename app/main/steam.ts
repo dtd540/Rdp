@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
 import path from 'path';
 import type { SteamGame } from '@shared/rpc';
 
@@ -8,8 +8,8 @@ import type { SteamGame } from '@shared/rpc';
  *
  * Everything here is read off this PC — the registry for the install path,
  * `libraryfolders.vdf` for extra library roots, and one `appmanifest_*.acf`
- * per installed title. No Steam Web API, so no key and nothing leaves the
- * machine.
+ * per installed title. Public Steam Community data fills in uninstalled
+ * purchases when visible; private profiles fall back to local account records.
  */
 
 /** Steam's CDN serves the store art; no auth, no rate limit worth worrying about. */
@@ -115,7 +115,203 @@ function unescapeVdf(value: string): string {
   return value.replace(/\\(["\\])/g, '$1');
 }
 
-/** Steam path from the registry, with the default install path as a fallback. */
+/**
+ * Apps registered in local library folders, not the account's ownership list.
+ * These are only one fallback source; uninstalled purchases are not listed here.
+ */
+export function libraryApps(steamPath: string): Map<string, number> {
+  const apps = new Map<string, number>();
+  const vdf = path.join(steamPath, 'steamapps', 'libraryfolders.vdf');
+  if (!existsSync(vdf)) return apps;
+
+  try {
+    const parsed = parseVdf(readFileSync(vdf, 'utf8')) as {
+      libraryfolders?: Record<string, { apps?: Record<string, string> } | undefined>;
+    };
+    for (const entry of Object.values(parsed.libraryfolders ?? {})) {
+      for (const [appId, size] of Object.entries(entry?.apps ?? {})) {
+        if (!/^\d+$/.test(appId)) continue;
+        const bytes = Number(size) || 0;
+        // Keep the largest figure — a title can be listed by several libraries.
+        if (!apps.has(appId) || bytes > (apps.get(appId) ?? 0)) apps.set(appId, bytes);
+      }
+    }
+  } catch (err) {
+    console.error('[steam] could not read library apps:', err);
+  }
+  return apps;
+}
+
+/** Select one Steam account, never merge another user's library into it. */
+export function accountLibrary(steamPath: string): { steamId?: string; apps: Map<string, number> } {
+  const apps = new Map<string, number>();
+  try {
+    const parsed = parseVdf(readFileSync(path.join(steamPath, 'config', 'loginusers.vdf'), 'utf8'));
+    const users = parsed.users as Record<string, Record<string, string>> | undefined;
+    const selected = Object.entries(users ?? {})
+      .filter(([id]) => /^\d{17}$/.test(id))
+      .sort(([, a], [, b]) => Number(b.MostRecent ?? 0) - Number(a.MostRecent ?? 0) || Number(b.Timestamp ?? 0) - Number(a.Timestamp ?? 0))[0];
+    if (!selected) return { apps };
+    const steamId = selected[0];
+    const accountId = String(BigInt(steamId) - 76561197960265728n);
+    try {
+      const local = parseVdf(readFileSync(path.join(steamPath, 'userdata', accountId, 'config', 'localconfig.vdf'), 'utf8'));
+      const root = local.UserLocalConfigStore as Record<string, unknown> | undefined;
+      const software = root?.Software as Record<string, unknown> | undefined;
+      const valve = software?.Valve as Record<string, unknown> | undefined;
+      const steam = valve?.Steam as Record<string, unknown> | undefined;
+      const records = steam?.apps as Record<string, Record<string, string>> | undefined;
+      for (const [id, record] of Object.entries(records ?? {})) {
+        if (/^[1-9]\d*$/.test(id)) apps.set(id, Number(record.LastPlayed ?? 0) || 0);
+      }
+    } catch (err) {
+      console.warn('[steam] account local cache unavailable:', err);
+    }
+    return { steamId, apps };
+  } catch {
+    return { apps };
+  }
+}
+
+function xmlText(text: string): string {
+  return text.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1')
+    .replace(/&#(x[\da-f]+|\d+);/gi, (_, code: string) => String.fromCodePoint(code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : Number(code)))
+    .replace(/&(amp|lt|gt|quot|apos);/g, (_, key: string) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[key] ?? '');
+}
+
+/** Public Steam Community owned-games XML; no API key or login token needed. */
+export function parseOwnedGamesXml(xml: string): Map<string, StoreEntry> | null {
+  if (!/<games(?:\s[^>]*)?\s*\/>/.test(xml) && !/<games(?:\s[^>]*)?>[\s\S]*<\/games>/.test(xml)) return null;
+  const games = new Map<string, StoreEntry>();
+  for (const match of xml.matchAll(/<game>([\s\S]*?)<\/game>/g)) {
+    const id = /<appID>(\d+)<\/appID>/.exec(match[1])?.[1];
+    const name = /<name>([\s\S]*?)<\/name>/.exec(match[1])?.[1];
+    if (id && name) games.set(id, { name: xmlText(name), type: 'game' });
+  }
+  return games;
+}
+
+async function publicAccountGames(steamId?: string): Promise<Map<string, StoreEntry> | null> {
+  if (!steamId) return null;
+  try {
+    const response = await fetch(`https://steamcommunity.com/profiles/${steamId}/games?tab=all&xml=1`, {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return null;
+    return parseOwnedGamesXml(await response.text());
+  } catch (err) {
+    console.warn('[steam] public owned library unavailable:', err);
+    return null;
+  }
+}
+
+/** One name lookup from Valve, cached on disk so a rescan costs nothing. */
+interface StoreEntry {
+  name: string;
+  type: string;
+}
+
+type NameCache = Record<string, StoreEntry>;
+
+function readNameCache(file: string | undefined): NameCache {
+  if (!file || !existsSync(file)) return {};
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as NameCache;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Resolve names for library-only titles.
+ *
+ * Installed titles already carry a name from their manifest, so this only hits
+ * the network for what is owned but not installed. Requests are capped and
+ * cached, with bounded concurrency rather than truncating large libraries.
+ */
+async function resolveStoreNames(ids: string[], cacheFile?: string): Promise<NameCache> {
+  const cache = readNameCache(cacheFile);
+  // An entry without a name is a half-written or stale cache hit — ask again.
+  const missing = ids.filter((id) => !cache[id]?.name);
+  let dirty = false;
+  let next = 0;
+
+  // Resolve every id, with four workers and a bounded wait for each request.
+  await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
+    while (next < missing.length) {
+      const id = missing[next++];
+      try {
+        const res = await fetch(`https://store.steampowered.com/api/appdetails?appids=${id}`, {
+          headers: { 'user-agent': 'VRChatMusicBridge/1.0' },
+          signal: AbortSignal.timeout(8000)
+        });
+        const body = (await res.json()) as Record<string, { success: boolean; data?: { name?: string; type?: string } }>;
+        const entry = body[id];
+        if (entry?.success && entry.data?.name) {
+          cache[id] = { name: entry.data.name, type: entry.data.type ?? 'game' };
+          dirty = true;
+        }
+      } catch (err) {
+        console.error(`[steam] store lookup failed for ${id}:`, err);
+      }
+    }
+  }));
+
+  if (dirty && cacheFile) {
+    try {
+      writeFileSync(cacheFile, JSON.stringify(cache, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[steam] could not write the name cache:', err);
+    }
+  }
+  return cache;
+}
+
+/**
+ * The full picture: everything installed, plus everything else the account
+ * owns. Titles Steam reports as DLC or a tool are dropped — this is a games
+ * list, not an entitlement dump.
+ */
+export async function scanSteamLibrary(steamPath: string, cacheFile?: string): Promise<SteamGame[]> {
+  return (await scanSteamLibraryResult(steamPath, cacheFile)).games;
+}
+
+export async function scanSteamLibraryResult(steamPath: string, cacheFile?: string): Promise<{ games: SteamGame[]; detail?: string }> {
+  const installed = scanSteamGames(steamPath);
+  const library = libraryApps(steamPath);
+  const account = accountLibrary(steamPath);
+  for (const id of account.apps.keys()) if (!library.has(id)) library.set(id, 0);
+  const owned = await publicAccountGames(account.steamId);
+  for (const id of owned?.keys() ?? []) if (!library.has(id)) library.set(id, 0);
+  const installedById = new Map(installed.map((game) => [game.id, game]));
+
+  const missingIds = [...library.keys()].filter((id) => !installedById.has(id));
+  const names = await resolveStoreNames(missingIds.filter((id) => !owned?.has(id)), cacheFile);
+
+  const libraryOnly: SteamGame[] = [];
+  for (const [id, size] of library) {
+    if (installedById.has(id)) continue;
+    const entry = owned?.get(id) ?? names[id];
+    // Known DLC/tools are excluded, but failed lookups must not hide games.
+    if (entry?.type && entry.type !== 'game') continue;
+    libraryOnly.push({
+      id,
+      name: entry?.name ?? `Steam app ${id}`,
+      installed: false,
+      installDir: '',
+      sizeOnDisk: size,
+      lastPlayed: account.apps.get(id) ?? 0,
+      libraryPath: steamPath,
+      ...coverUrls(id)
+    });
+  }
+
+  const all = [...installed, ...libraryOnly];
+  return {
+    games: all.sort((a, b) => b.lastPlayed - a.lastPlayed || b.sizeOnDisk - a.sizeOnDisk),
+    detail: owned ? undefined : 'Showing all locally known Steam titles. The full owned library could not be read; sign into Steam and make your Steam profile and Game details public, then Rescan. Private, hidden, and Family Sharing titles may be absent.'
+  };
+}
 export async function findSteamPath(): Promise<string | null> {
   const fromRegistry = await regQuery('HKCU\\Software\\Valve\\Steam', 'SteamPath');
   const candidates = [
@@ -171,6 +367,7 @@ function readManifest(file: string, libraryPath: string): SteamGame | null {
     return {
       id,
       name,
+      installed: true,
       installDir: installDir ? path.join(libraryPath, 'steamapps', 'common', installDir) : '',
       sizeOnDisk: Number(app.SizeOnDisk ?? 0) || 0,
       lastPlayed: Number(app.LastPlayed ?? 0) || 0,
@@ -229,4 +426,9 @@ export function totalSize(games: SteamGame[]): number {
 /** Steam's URL scheme — no shell argument quoting games can mangle. */
 export function launchUrl(appId: string): string {
   return `steam://rungameid/${appId}`;
+}
+
+/** Hands an owned-but-not-installed title to Steam's own installer. */
+export function installUrl(appId: string): string {
+  return `steam://install/${appId}`;
 }
