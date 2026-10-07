@@ -67,8 +67,8 @@ console.log(`\n  about to:
     3. create tag v${next}
     4. push ${branch} and the tag
 
-  Pushing the tag publishes a PUBLIC release on Rdp-releases that installed
-  copies of the app auto-update from.`);
+  Pushing the tag publishes a release on the private Rdp-releases repo that
+  installed copies of the app auto-update from, using each machine's GH_TOKEN.`);
 
 if (dryRun) {
   console.log('\n  dry run: nothing was written, committed, tagged or pushed.\n');
