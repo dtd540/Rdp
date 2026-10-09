@@ -276,6 +276,9 @@ function createBrowserMock(): Bridge {
           return { ok: false, detail };
         }
       }
+      if (op === 'detectVrchatOscPort') {
+        return { ok: false, detail: 'This browser preview cannot inspect running Windows processes. Use the installed app while VRChat is open.' };
+      }
       if (op === 'getBackground') {
         return mockBackground ? { ok: true, image: mockBackground } : { ok: true };
       }

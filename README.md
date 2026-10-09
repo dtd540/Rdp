@@ -22,7 +22,7 @@ VRChat + game audio stay on your normal speakers → no feedback loop.
 - **Verification**: live meters on the mic, music input and VoiceMeeter Output; session checks confirm Spotify is on the selected input and VRChat is capturing VoiceMeeter Output.
 - **Tray controls**: music volume, *send music to VRChat mic* mute toggle, and voice ducking (music drops 12 dB while you talk).
 - **App background**: Settings → App background paints any picture or animated GIF from this PC behind the app (PNG, JPG, WEBP, BMP, AVIF, GIF; under 25 MB). The file is referenced in place — it is never copied or uploaded — so moving or deleting it just tells you to pick it again, and *Remove* restores the default dark theme.
-- **Updates**: the installed Windows app periodically checks the `dtd540/Rdp-releases` GitHub Releases feed, downloads compatible NSIS updates, and offers a **Restart to update** button. That feed can be made private: builds then authenticate with a read-only `GH_TOKEN` set on the machine, so no credential ever ships inside the installer. Source stays in the private `dtd540/Rdp` repository.
+- **Updates**: the installed Windows app periodically checks the public `dtd540/Rdp-releases` GitHub Releases feed anonymously, downloads compatible NSIS updates, and offers a **Restart to update** button. Publishing is handled by GitHub Actions with a write-scoped `RELEASES_GH_TOKEN`; no credential is shipped to users. Source stays in the private `dtd540/Rdp` repository.
 
 ## Requirements
 
@@ -64,9 +64,7 @@ node route_matrix_test.mjs  # routing matrix across active/idle/foreign pids
 
 **Bootstrap requirement:** the already published `0.1.0` installer predates in-app updating. Users on `0.1.0` must install one newer updater-enabled installer manually; after that, later published releases can be installed from inside the app. Do not claim `0.1.0` users can update in-app.
 
-**Private feed migration:** a build only reads a private feed if `private: true` was baked into its `resources/app-update.yml`. Builds published before that (0.2.x, 0.3.0) carry `private: false` and cannot authenticate, so they stop updating the moment the release repository is made private. Install the first `private`-enabled build by hand on every machine that should keep updating, set `GH_TOKEN` there, restart the app, and only then lock the repository down.
-
-The update publisher configuration is pinned to `dtd540/Rdp-releases` in `package.json` and carries `private: true`. That flag is inert while no token is present — electron-updater only switches to its authenticated provider when `GH_TOKEN` or `GITHUB_TOKEN` exists in the environment — so a public feed keeps working exactly as before, and supplying the token is what enables a private one. Do not rename or transfer that repository after distributing updater-enabled builds. Never embed a token in the installer: a secret inside a distributed installer is extractable by anyone holding it, and GitHub revokes leaked tokens. Each machine that should receive updates sets `GH_TOKEN` to its own fine-grained PAT scoped to `Rdp-releases` with **Contents: Read-only**.
+The update publisher configuration is pinned to the public `dtd540/Rdp-releases` feed in `package.json` (`private: false`), so installed users do not need `GH_TOKEN`. GitHub Actions uses the separate `RELEASES_GH_TOKEN` secret to upload releases. Do not rename or transfer the release repository after distributing updater-enabled builds, and never embed a publishing token in the installer.
 
 ## Packaging
 

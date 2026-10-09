@@ -54,4 +54,10 @@ describe('theme form controls', () => {
   it('renders native widgets in the dark scheme', () => {
     expect(css).toMatch(/color-scheme:\s*dark/);
   });
+
+  it('keeps the Discord webview diagnostic visible over the full-size view', () => {
+    expect(css).toMatch(/\.discord-bounds-diagnostic\s*\{[^}]*position:\s*absolute/);
+    expect(css).toMatch(/\.discord-bounds-diagnostic\s*\{[^}]*pointer-events:\s*none/);
+    expect(css).toMatch(/\.discord-webview-frame\s*\{[^}]*position:\s*relative/);
+  });
 });

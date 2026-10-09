@@ -30,20 +30,20 @@ confirm the commit landed *before* triggering a publish run.
 
 ## 2. One-time setup (already done — verify, don't redo)
 
-A **fine-grained personal access token** is stored as the Actions secret **`RELEASES_GH_TOKEN`**.
+A GitHub Actions secret named **`RELEASES_GH_TOKEN`** is used for release uploads.
 
 Required properties — verify by name, never by value:
 
 - **Repository access:** "Only select repositories" → `dtd540/Rdp-releases` **only**
-- **Permissions:** `Contents: Read and write`  (+ implicit `Metadata: Read-only`)
-- Must **not** be a classic token, and must **not** rely on `Administration` access
-- Expiry is finite (currently set well into 2026) — re-check before a long publishing pause
+- **Permissions:** `Contents: Read and write` (+ implicit `Metadata: Read-only`)
+- Never use a token with broader access than required; never paste or print the secret
+- Check expiry and permissions in GitHub settings before release week
 
 ### Why scope matters (each was a real failure)
 
 | Token setup | Result |
 | --- | --- |
-| No token | `GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"` |
+| Missing/invalid Actions secret | Release upload fails with an authentication error; verify `RELEASES_GH_TOKEN` in source-repo Actions secrets |
 | `Administration: read/write` but **not** `Contents: read/write` | `403` — `Resource not accessible by personal access token` |
 | Correct token, but releases repo had zero commits | `422` — `Repository is empty.` |
 | Correct token, run started **before** the README commit existed | `422` again — the run was doomed before the fix landed |
@@ -56,7 +56,7 @@ fixed. **Always compare the API error timestamp against when you applied the fix
 - The token lives **only** in GitHub Actions secrets. Never in app code, `package.json`, or the installer.
 - Never commit a token, `.env`, or credential file. `.env` and `.env.*` are already gitignored.
 - Never use a token for the private source repo to publish public releases.
-- The installed app **never** embeds a token; it reads a public feed.
+- The installed app **never** embeds a token; it reads the public feed anonymously.
 
 ---
 
@@ -207,9 +207,9 @@ end-to-end, publish a genuinely newer version and let an older install pull it. 
 
 Work top-down. In this project, each failure only became visible after the previous one was fixed.
 
-### `GitHub Personal Access Token is not set...`
-The `RELEASES_GH_TOKEN` Actions secret doesn't exist in the **private source** repo
-(`Rdp` → Settings → Secrets and variables → Actions). Add it there.
+### Release upload authentication error
+Confirm the `RELEASES_GH_TOKEN` Actions secret exists in the private source repo
+(`Rdp` → Settings → Secrets and variables → Actions) and is scoped to the public releases repo.
 
 ### `403` — `Resource not accessible by personal access token`
 The token can reach the repo but lacks **Contents: Read and write**.

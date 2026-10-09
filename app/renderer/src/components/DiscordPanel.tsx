@@ -1,5 +1,26 @@
-import { useRef, useState, type FC, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { bridge, hasNativeWebviews } from '../bridge';
+
+interface ElementSize {
+  width: number;
+  height: number;
+}
+
+interface DiscordBounds {
+  frame: ElementSize;
+  webview: ElementSize | null;
+}
+
+function elementSize(element: Element | null): ElementSize | null {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return { width: Math.round(rect.width), height: Math.round(rect.height) };
+}
+
+function sameBounds(a: DiscordBounds | null, b: DiscordBounds): boolean {
+  return a?.frame.width === b.frame.width && a.frame.height === b.frame.height &&
+    a?.webview?.width === b.webview?.width && a?.webview?.height === b.webview?.height;
+}
 
 export const DiscordMark: FC = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -13,8 +34,32 @@ export const DiscordMark: FC = () => (
 type DiscordWebview = HTMLElement & { reload: () => void };
 
 export const DiscordPanel: FC = () => {
+  const frameRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<DiscordWebview>(null);
   const [reloading, setReloading] = useState(false);
+  const [bounds, setBounds] = useState<DiscordBounds | null>(null);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+
+    const measure = () => {
+      const frameSize = elementSize(frame);
+      if (!frameSize) return;
+      const next = { frame: frameSize, webview: elementSize(webviewRef.current) };
+      setBounds((current) => sameBounds(current, next) ? current : next);
+    };
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    if (webviewRef.current) observer.observe(webviewRef.current);
+    window.addEventListener('resize', measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
 
   const reloadDiscord = () => {
     webviewRef.current?.reload();
@@ -24,7 +69,7 @@ export const DiscordPanel: FC = () => {
 
   return (
     <section className="discord-panel" aria-label="Discord">
-      <div className="discord-webview-frame">
+      <div className="discord-webview-frame" ref={frameRef}>
         {hasNativeWebviews ? (
           <>
             <webview
@@ -55,6 +100,12 @@ export const DiscordPanel: FC = () => {
             </button>
           </div>
         )}
+        {bounds && <div className="discord-bounds-diagnostic" aria-label="Discord view size diagnostic">
+          <span>Frame: {bounds.frame.width} × {bounds.frame.height}px</span>
+          {bounds.webview
+            ? <span>Webview: {bounds.webview.width} × {bounds.webview.height}px</span>
+            : <span>Native webview unavailable in browser preview</span>}
+        </div>}
       </div>
     </section>
   );

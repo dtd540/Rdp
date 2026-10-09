@@ -43,38 +43,20 @@ way a release silently produces nothing.
 ## What actually gets published
 
 - Source code: `dtd540/Rdp` (private)
-- The installer and update feed: `dtd540/Rdp-releases` — **public as of this writing**,
-  so anyone can download a release and installed copies auto-update from it using no
-  credential. See *Updating from a private feed* to lock it down.
+- The installer and update feed: `dtd540/Rdp-releases` — **public**. Anyone can download
+  releases; installed copies fetch the update manifest and installer anonymously. The
+  publisher uses the `RELEASES_GH_TOKEN` GitHub Actions secret only to upload assets.
 
 Assets per release: `VRChat-Music-Bridge-Setup-<version>.exe`, its `.blockmap`, and
 `latest.yml`. `latest.yml` is the manifest the auto-updater reads, so it must always
 ship alongside the `.exe`.
 
-## Updating from a private feed
+## Feed access
 
-The installer must never carry a credential, so the token lives on the machine instead:
-
-```bash
-setx GH_TOKEN "<fine-grained PAT, Contents: Read-only, scoped to Rdp-releases>"
-```
-
-`setx` writes a user environment variable. Restart the app afterwards, because a running
-process keeps the environment it was started with.
-
-What decides whether a build can read a private feed is `resources/app-update.yml`
-inside the installed app: `private: true` there makes electron-updater authenticate with
-that token, and `private: false` cannot, no matter what is in the environment.
-
-To lock the feed down without stranding yourself, in this order:
-
-1. Release a build that has `private: true` baked in.
-2. Install that build by hand on every machine that should keep updating.
-3. Set `GH_TOKEN` on each machine and restart the app.
-4. Make `Rdp-releases` private.
-
-Step 4 first strands every existing install — including builds you have not replaced yet
-— because they cannot authenticate and will silently stop seeing releases.
+Installed app builds use the public GitHub Releases provider (`private: false`) and need
+no local token. The publishing workflow authenticates separately with the repository
+Actions secret `RELEASES_GH_TOKEN`; never put that publishing credential in app code or
+an installer. Making the feed private would break existing public-feed builds.
 
 ## Watching it run
 
@@ -90,7 +72,7 @@ electron-builder packaging step). When it finishes, `Rdp-releases` has a new rel
 | Workflow fails at "Build and publish" with an auth error | The `RELEASES_GH_TOKEN` secret is missing, expired, or lacks `contents: write` on `Rdp-releases`. |
 | `npm run release` fails locally with `Access is denied` / `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` | The app is running and locking `release/win-unpacked`. Close it. This only affects local builds; CI is unaffected. |
 | Installed users never see the update | The version did not move, so the updater had nothing newer to offer. |
-| Update checks fail with a 404 or an auth error after the feed went private | `GH_TOKEN` is missing on that machine, or the installed build predates `private: true`. Set the token and restart; if the build is older, install the current installer by hand once. |
+| Update checks fail with a 404 or an auth error | Confirm `Rdp-releases` is still public and the published `latest.yml` is reachable. |
 
 ## Building locally without publishing
 
@@ -107,7 +89,6 @@ npx electron-builder --win --x64 --publish never --config.directories.output="C:
 
 ## Manual fallback
 
-If CI is unavailable, `npm run release` from a clean `main` does the same work locally,
-but needs `GH_TOKEN` in the environment. Remember the two local gotchas: setting a
-variable only in a shell window is temporary (`setx` makes it persist, and a running
-terminal keeps the old environment), and the app must be closed first.
+If CI is unavailable, `npm run release` from a clean `main` does the same work locally.
+It needs `GH_TOKEN` in the environment for upload permissions; do not share or embed this
+credential. Close the installed app first so it does not lock `release/win-unpacked`.

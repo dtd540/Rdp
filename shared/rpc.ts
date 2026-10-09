@@ -157,6 +157,7 @@ export interface BridgeOpResult {
   receiveBytesPerSecond?: number | null;
   sendBytesPerSecond?: number | null;
   appUptimeSeconds?: number;
+  port?: number;
   currentWorld?: string | null;
   vrchatRunning?: boolean;
   ok: boolean;

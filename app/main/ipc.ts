@@ -11,6 +11,7 @@ import { appUptimeSeconds, pcSnapshot, recentVrchatWorlds, sendChatbox, vrchatIs
 import { chatboxSourcePayload, windowsChatboxSources } from './chatboxSources';
 import { sampleNetworkRates, UNKNOWN_NETWORK_RATES } from './netStats';
 import { chatboxSender } from './osc';
+import { detectVrchatOscReceivePort } from './vrchatOscPort';
 import { parseWorldLink } from '@shared/gaming';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
 import { browserTabAction, disposeBrowserViews, findInBrowserTab, hideBrowserView, initializeBrowserViews, navigateBrowserTab, setBrowserBounds, stopFindInBrowserTab, syncBrowserTabs, zoomBrowserTab } from './browserView';
@@ -63,6 +64,8 @@ export function registerIpc(ctx: IpcContext): void {
     switch (op) {
       case 'pcSnapshot':
         return { ok: true, pc: await pcSnapshot() } satisfies BridgeOpResult;
+      case 'networkRates':
+        return { ok: true, ...await sampleNetworkRates(sidecar) } satisfies BridgeOpResult;
       case 'recentWorlds':
         return { ok: true, ...recentVrchatWorlds() } satisfies BridgeOpResult;
       case 'chatboxContext': {
@@ -79,6 +82,8 @@ export function registerIpc(ctx: IpcContext): void {
           return { ok: false, detail: error instanceof Error ? error.message : String(error), appUptimeSeconds: appUptimeSeconds() } satisfies BridgeOpResult;
         }
       }
+      case 'detectVrchatOscPort':
+        return await detectVrchatOscReceivePort();
       case 'setChatboxTyping': {
         try {
           await chatboxSender.typing(JSON.parse(arg ?? '{}'));
