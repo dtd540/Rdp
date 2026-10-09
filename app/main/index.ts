@@ -1,4 +1,5 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session, dialog } from 'electron';
+import { applyMusicSend } from '@shared/audioControls';
 import { disposeBrowserViews } from './browserView';
 import path from 'path';
 import { SidecarClient } from './sidecar';
@@ -24,8 +25,11 @@ const trayCtx = {
   },
   getState,
   setMusicToVrchat: async (on: boolean) => {
-    await sidecar.tryCall('vm.setMusicToVrchat', { on });
-    setState({ musicMutedToVrchat: !on });
+    try {
+      await applyMusicSend(on, (method, params) => sidecar.call(method, params), setState);
+    } catch (error) {
+      dialog.showErrorBox('Music routing change failed', error instanceof Error ? error.message : String(error));
+    }
     rebuildTray(trayCtx);
   },
   setDucking: async (on: boolean) => {

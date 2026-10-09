@@ -4,7 +4,7 @@ import path from 'path';
 import type { AppState, BridgeOpResult } from '@shared/rpc';
 import type { OpenDialogOptions } from 'electron';
 import type { SidecarClient } from './sidecar';
-import { getState, setState } from './state';
+import { getState, saveAudioBaseline, setState } from './state';
 import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground } from './background';
 import { findSteamPath, installUrl, launchUrl, scanSteamGames, scanSteamLibraryResult } from './steam';
 import { appUptimeSeconds, pcSnapshot, recentVrchatWorlds, sendChatbox, vrchatIsRunning, vrchatLogFolder } from './gaming';
@@ -66,6 +66,26 @@ export function registerIpc(ctx: IpcContext): void {
         return { ok: true, pc: await pcSnapshot() } satisfies BridgeOpResult;
       case 'networkRates':
         return { ok: true, ...await sampleNetworkRates(sidecar) } satisfies BridgeOpResult;
+      case 'saveAudioBaseline': {
+        try {
+          const baseline = await sidecar.call<import('@shared/rpc').AudioBaseline>('audio.captureBaseline');
+          saveAudioBaseline(baseline);
+          return { ok: true, detail: 'Current Windows Spotify route and VoiceMeeter settings saved.' } satisfies BridgeOpResult;
+        } catch (error) {
+          return { ok: false, detail: error instanceof Error ? error.message : String(error) } satisfies BridgeOpResult;
+        }
+      }
+      case 'restoreAudioBaseline': {
+        const baseline = getState().audioBaseline;
+        if (!baseline) return { ok: false, detail: 'No saved audio settings are available.' } satisfies BridgeOpResult;
+        try {
+          const result = await sidecar.call<import('@shared/rpc').VoiceMeeterConfigResult>('audio.restoreBaseline', { baseline });
+          if (result.ok) setState({ musicVolumeDb: baseline.musicVolumeDb, musicMutedToVrchat: baseline.musicMutedToVrchat, duckingEnabled: baseline.duckingEnabled });
+          return { ok: result.ok, detail: result.steps.map((step) => `${step.name}: ${step.detail ?? (step.ok ? 'restored' : 'failed')}`).join(' · ') } satisfies BridgeOpResult;
+        } catch (error) {
+          return { ok: false, detail: error instanceof Error ? error.message : String(error) } satisfies BridgeOpResult;
+        }
+      }
       case 'recentWorlds':
         return { ok: true, ...recentVrchatWorlds() } satisfies BridgeOpResult;
       case 'chatboxContext': {

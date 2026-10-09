@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
-import type { AppState, ServiceId } from '@shared/rpc';
+import type { AppState, AudioBaseline, ServiceId } from '@shared/rpc';
 
 const DEFAULT_STATE: AppState = {
   setupComplete: false,
@@ -12,7 +12,8 @@ const DEFAULT_STATE: AppState = {
   duckingEnabled: true,
   micEndpointName: null,
   musicEndpointName: null,
-  backgroundPath: null
+  backgroundPath: null,
+  audioBaseline: null
 };
 
 let cache: AppState | null = null;
@@ -28,7 +29,7 @@ export function getState(): AppState {
   try {
     if (existsSync(stateFile())) {
       const raw = JSON.parse(readFileSync(stateFile(), 'utf8')) as Partial<AppState>;
-      cache = { ...DEFAULT_STATE, ...raw };
+      cache = { ...DEFAULT_STATE, ...raw, audioBaseline: raw.audioBaseline ?? null };
       return cache;
     }
   } catch (err) {
@@ -47,6 +48,10 @@ export function setState(patch: Partial<AppState>): AppState {
     console.error('[state] failed to persist:', err);
   }
   return next;
+}
+
+export function saveAudioBaseline(baseline: AudioBaseline): AppState {
+  return setState({ audioBaseline: baseline });
 }
 
 export function resetState(): AppState {

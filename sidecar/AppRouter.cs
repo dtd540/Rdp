@@ -184,52 +184,46 @@ public sealed class AppRouter : IDisposable
 
     public void SetAppEndpoint(uint pid, string endpointId)
     {
+        foreach (var role in new[] { 0, 1, 2 }) SetAppEndpointRole(pid, role, endpointId);
+    }
+
+    public void SetAppEndpointRole(uint pid, int role, string? endpointId)
+    {
         if (!_available) throw new InvalidOperationException(_unavailableReason ?? "routing API unavailable");
+        if (role is < 0 or > 2) throw new ArgumentOutOfRangeException(nameof(role));
 
         var vtable = Marshal.ReadIntPtr(_iface);
         var setPtr = Marshal.ReadIntPtr(vtable, PtrSize * SetSlot);
         var set = Marshal.GetDelegateForFunctionPointer<SetPersistedDelegate>(setPtr);
-
-        var devicePath = ToDevicePath(endpointId, ERender);
-        if (WindowsCreateString(devicePath, devicePath.Length, out var hs) != S_OK)
+        var devicePath = endpointId is null ? null : ToDevicePath(endpointId, ERender);
+        var hs = IntPtr.Zero;
+        if (devicePath is not null && WindowsCreateString(devicePath, devicePath.Length, out hs) != S_OK)
             throw new InvalidOperationException("WindowsCreateString(endpointId) failed");
 
         int hr;
-        try
-        {
-            hr = S_OK;
-            foreach (var role in new[] { 0, 1, 2 })
-            {
-                hr = set(_iface, pid, ERender, role, hs);
-                if (hr != S_OK) break;
-            }
-        }
-        finally
-        {
-            WindowsDeleteString(hs);
-        }
+        try { hr = set(_iface, pid, ERender, role, hs); }
+        finally { if (hs != IntPtr.Zero) WindowsDeleteString(hs); }
 
-        var readBack = TryGetAppEndpoint(pid, out var got);
-        if (readBack)
-        {
-            var gotId = got == null ? null : UnpackDevicePath(got);
-            if (string.Equals(gotId, endpointId, StringComparison.OrdinalIgnoreCase)) return;
-            throw new InvalidOperationException(
-                $"persisted endpoint mismatch (got '{got ?? "null"}', want '{endpointId}')");
-        }
-        if (hr != S_OK)
-            throw new InvalidOperationException($"SetPersistedDefaultAudioEndpoint failed: 0x{hr:X8}");
+        if (hr != S_OK) throw new InvalidOperationException($"SetPersistedDefaultAudioEndpoint failed: 0x{hr:X8}");
+        if (!TryGetAppEndpoint(pid, role, out var got)) return;
+        var gotId = string.IsNullOrEmpty(got) ? null : UnpackDevicePath(got);
+        if (!string.Equals(gotId, endpointId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"persisted endpoint mismatch (got '{got ?? "default"}', want '{endpointId ?? "default"}')");
     }
 
-    public bool TryGetAppEndpoint(uint pid, out string? endpointId)
+    public bool TryGetAppEndpoint(uint pid, out string? endpointId) => TryGetAppEndpoint(pid, 1, out endpointId);
+
+    public bool TryGetAppEndpoint(uint pid, int role, out string? endpointId)
     {
         endpointId = null;
         if (!_available) return false;
+        if (role is < 0 or > 2) return false;
         var vtable = Marshal.ReadIntPtr(_iface);
         var getPtr = Marshal.ReadIntPtr(vtable, PtrSize * GetSlot);
         var get = Marshal.GetDelegateForFunctionPointer<GetPersistedDelegate>(getPtr);
-        var hr = get(_iface, pid, ERender, 1, out var hs);
-        if (hr != S_OK || hs == IntPtr.Zero) return false;
+        var hr = get(_iface, pid, ERender, role, out var hs);
+        if (hr != S_OK) return false;
+        if (hs == IntPtr.Zero) return true;
         try
         {
             var buf = WindowsGetStringRawBuffer(hs, out var len);

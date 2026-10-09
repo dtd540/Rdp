@@ -923,9 +923,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .magic-layout[data-section="Status"] .magic-status-view { margin: 0; }
 .magic-layout[data-section="Controls"] .magic-control-panel { margin: 0; }
 .magic-chatbox .inline-notice { grid-column: 1 / -1; margin: 0 0 2px; }
-.magic-layout[data-section="Chatting"] .magic-output { min-width: 0; grid-column: 2; }
-.magic-layout[data-section="Chatting"] .magic-templates { align-self: start; }
-.magic-layout[data-section="Chatting"] .magic-editor { min-width: 0; grid-column: 1 / -1; }
+.magic-layout[data-section="Chatting"] .magic-output { min-width: 0; grid-column: 2; grid-row: 3; }
+.magic-layout[data-section="Chatting"] .magic-templates { align-self: start; grid-column: 1; grid-row: 3; }
+.magic-layout[data-section="Chatting"] .magic-editor { min-width: 0; grid-column: 1 / -1; grid-row: 4; }
+.magic-preset-loop { grid-column: 1 / -1; grid-row: 5; }
+.magic-loop-message { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; }
+.magic-loop-message textarea { flex: 1; min-width: 0; }
+.magic-loop-message button { flex: none; }
 .magic-layout[data-section="Chatting"] .magic-editor:not(.is-open) { display: none; }
 .magic-preview-actions { justify-content: flex-end; margin: 0; }
 .magic-preview-actions .small { flex: none; }
@@ -944,6 +948,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .magic-layout[data-section="Chatting"] .magic-templates,
   .magic-layout[data-section="Chatting"] .magic-editor,
   .magic-layout[data-section="Chatting"] .magic-output { grid-column: 1 / -1; }
+  .magic-layout[data-section="Chatting"] .magic-templates { grid-row: 3; }
+  .magic-layout[data-section="Chatting"] .magic-output { grid-row: 4; }
+  .magic-layout[data-section="Chatting"] .magic-editor { grid-row: 5; }
+  .magic-layout[data-section="Chatting"] .magic-preset-loop { grid-row: 6; }
 }
 @media (max-width: 520px) {
   .magic-section-tabs { gap: 4px; padding: 5px; }

@@ -10,6 +10,7 @@ export interface ChatboxSettings {
   status: string;
   port: number;
   sound: boolean;
+  smartFit: boolean;
   sendImmediately: boolean;
   intervalSeconds: number;
   clock24h: boolean;
@@ -27,7 +28,7 @@ export interface ChatboxSettings {
 export const DEFAULT_CHATBOX_SETTINGS: ChatboxSettings = {
   version: SETTINGS_VERSION,
   activity: 'Hanging out in VRChat', status: 'Available to chat', port: 9000,
-  sound: false, sendImmediately: true, intervalSeconds: 30, clock24h: false, clockSeconds: false, integrations: normaliseChatIntegrations(null),
+  sound: false, smartFit: true, sendImmediately: true, intervalSeconds: 30, clock24h: false, clockSeconds: false, integrations: normaliseChatIntegrations(null),
   integrationOptions: normaliseChatIntegrationOptions(null), lineSeparator: 'newline', messageFrame: 'none', frameTop: '', frameBottom: '',
   borderStyle: 'none', borderLeft: '', borderRight: ''
 };
@@ -40,7 +41,7 @@ export function normaliseChatboxSettings(raw: unknown): ChatboxSettings {
     activity: typeof value.activity === 'string' ? value.activity.slice(0, 60) : DEFAULT_CHATBOX_SETTINGS.activity,
     status: typeof value.status === 'string' ? value.status.slice(0, 60) : DEFAULT_CHATBOX_SETTINGS.status,
     port: Number.isInteger(value.port) && value.port! >= 1024 && value.port! <= 65535 ? value.port! : 9000,
-    sound: value.sound === true, sendImmediately: value.sendImmediately !== false,
+    sound: value.sound === true, smartFit: value.smartFit !== false, sendImmediately: value.sendImmediately !== false,
     intervalSeconds: [15, 30, 60, 120].includes(value.intervalSeconds ?? 0) ? value.intervalSeconds! : 30,
     clock24h: value.clock24h === true, clockSeconds: value.clockSeconds === true,
     integrations: poisonedEmojiFlags ? integrations.map((item) => ({ ...item, showEmoji: true })) : integrations,

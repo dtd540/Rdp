@@ -1,5 +1,6 @@
 import type {
   AppState,
+  AudioBaseline,
   AudioEndpointInfo,
   AudioSessionInfo,
   AudioSettingsScan,
@@ -17,6 +18,7 @@ export type { UpdateStatus };
 
 export type {
   AppState,
+  AudioBaseline,
   AudioEndpointInfo,
   AudioSessionInfo,
   AudioSettingsScan,
@@ -68,6 +70,7 @@ function createBrowserMock(): Bridge {
 
   let state: AppState = {
     setupComplete: false,
+    audioBaseline: null,
     activeService: null,
     checks: [],
     musicMutedToVrchat: false,
@@ -150,6 +153,8 @@ function createBrowserMock(): Bridge {
     }, 140);
   }
 
+  let mockBaseline: AudioBaseline | null = null;
+
   return {
     call: async (method: string) => {
       switch (method) {
@@ -174,6 +179,11 @@ function createBrowserMock(): Bridge {
             }],
             voiceMeeter: { running: true, kind: 'Potato', a1OutputName: 'Speakers (Realtek High Definition Audio)', a1MatchesWindowsPlaybackDefault: true }
           };
+        case 'audio.captureBaseline':
+          mockBaseline = { capturedAt: new Date().toISOString(), spotifyRoutes: [{ pid: 4242, processName: 'Spotify', endpoints: [{ role: 0, endpointId: endpoints[0].id, endpointName: endpoints[0].name, hasSavedValue: true }, { role: 1, endpointId: endpoints[0].id, endpointName: endpoints[0].name, hasSavedValue: true }, { role: 2, endpointId: endpoints[0].id, endpointName: endpoints[0].name, hasSavedValue: true }] }], voiceMeeter: { kind: 3, microphoneDevice: 'Microphone (USB Audio Device)', a1Output: 'Speakers (Realtek High Definition Audio)', musicEndpoint: endpoints[2].name, musicStrip: 6, micMute: 0, micA1: 0, micB1: 1, micGain: 0, musicMute: 0, musicA1: 1, musicB1: 1, musicGain: 0, a1Mute: 0, b1Mute: 0 }, musicVolumeDb: state.musicVolumeDb, musicMutedToVrchat: state.musicMutedToVrchat, duckingEnabled: state.duckingEnabled };
+          return mockBaseline;
+        case 'audio.restoreBaseline':
+          return mockBaseline ? { ok: true, steps: [{ name: 'voicemeeter', ok: true, detail: 'Saved VoiceMeeter settings restored.' }, { name: 'spotify-routing', ok: true, detail: 'Saved Spotify route restored.' }] } : { ok: false, steps: [{ name: 'restore', ok: false, detail: 'No saved audio settings.' }] };
         case 'vm.state':
           return {
             installed: true,
@@ -230,6 +240,8 @@ function createBrowserMock(): Bridge {
           return { ok: true };
         case 'diagnostics.tone':
           return { ok: true, started: true };
+        case 'vm.setMusicToVrchat':
+          return true;
         case 'vm.muteMusicToVrchat':
           return { ok: true, muted: true };
         case 'vm.setMusicVolume':
@@ -253,6 +265,16 @@ function createBrowserMock(): Bridge {
       install: async () => false
     },
     op: async (op, arg) => {
+      if (op === 'saveAudioBaseline') {
+        const baseline = await bridge.call('audio.captureBaseline') as AudioBaseline;
+        mockBaseline = baseline;
+        await bridge.setState({ audioBaseline: baseline });
+        return { ok: true, detail: 'Mock audio settings saved in this browser preview.' };
+      }
+      if (op === 'restoreAudioBaseline') {
+        if (!mockBaseline) return { ok: false, detail: 'No saved audio settings.' };
+        return { ok: true, detail: 'Mock saved audio settings restored.' };
+      }
       if (op === 'openExternal' && arg) {
         try {
           window.open(arg, '_blank', 'noopener');

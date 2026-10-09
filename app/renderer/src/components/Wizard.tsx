@@ -15,6 +15,7 @@ import {
 } from '../bridge';
 import { DEFAULT_MUSIC_BROWSER, MUSIC_BROWSERS, musicBrowser, musicTargetProcess } from '../musicBrowser';
 import { useWindowVisible } from '../useWindowVisible';
+import { AudioBaselineControls } from './AudioBaselineControls';
 
 interface Props {
   state: AppState;
@@ -409,6 +410,7 @@ export const Wizard: FC<Props> = ({ state, setState, peaks }) => {
             {applying ? 'Applying…' : 'Apply routing'}
           </button>
         </div>
+        <AudioBaselineControls state={state} setState={setState} />
         {audioScan ? (
           <div className="inline-notice">
             <b>Read-only audio scan · {new Date(audioScan.scannedAt).toLocaleTimeString()}</b><br />

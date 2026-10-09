@@ -63,6 +63,15 @@ describe('browser mock bridge (preview mode)', () => {
     expect(scan.voiceMeeter.a1OutputName).toContain('Speakers');
   });
 
+  it('saves a mock audio baseline, persists it, and supports restoring it', async () => {
+    const saved = await bridge.op('saveAudioBaseline');
+    expect(saved.ok).toBe(true);
+    const state = await bridge.getState();
+    expect(state.audioBaseline?.spotifyRoutes[0].endpoints).toHaveLength(3);
+    expect(state.audioBaseline?.voiceMeeter.musicStrip).toBe(6);
+    expect((await bridge.op('restoreAudioBaseline')).ok).toBe(true);
+  });
+
   it('reports all-healthy config steps with the documented step names', async () => {
     const res = (await bridge.call('vm.applyConfig', {})) as {
       ok: boolean;

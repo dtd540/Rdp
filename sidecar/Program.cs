@@ -91,6 +91,8 @@ public static class Program
 
         "endpoints.list" => CoreAudio.ListEndpoints(Rpc.Param<bool?>(parms, "force") ?? false),
         "audio.scanSettings" => AudioScanSettings(),
+        "audio.captureBaseline" => CaptureAudioBaseline(),
+        "audio.restoreBaseline" => RestoreAudioBaseline(parms),
 
         "sessions.list" => CoreAudio.ListSessions(Req(parms, "endpointId")),
 
@@ -195,6 +197,29 @@ public static class Program
             spotifySessions = scan.SpotifySessions,
             voiceMeeter = new { running = vmRunning, kind = vmRunning ? kindName : null, a1OutputName, a1MatchesWindowsPlaybackDefault = a1Endpoint is not null && a1Endpoint.Id == scan.DefaultPlayback?.Id }
         };
+    }
+
+    private static object CaptureAudioBaseline()
+    {
+        var router = EnsureRouter();
+        return AudioBaselineManager.Capture(Vm, Cfg, router, Cfg.UserGainDb, !Cfg.MusicToVrchat, Cfg.DuckingEnabled);
+    }
+
+    private static object RestoreAudioBaseline(JsonElement? parms)
+    {
+        var baselineElement = parms?.ValueKind == JsonValueKind.Object && parms.Value.TryGetProperty("baseline", out var property)
+            ? property
+            : throw new ArgumentException("missing audio baseline");
+        var baseline = baselineElement.Deserialize<AudioBaseline>(Rpc.JsonOptions)
+            ?? throw new ArgumentException("invalid audio baseline");
+        var result = AudioBaselineManager.Restore(baseline, Vm, Cfg, _duck!, EnsureRouter());
+        if (result.Ok) Cfg.RestoreControlState(baseline.MusicVolumeDb, baseline.DuckingEnabled);
+        return result;
+    }
+
+    private static AppRouter EnsureRouter()
+    {
+        lock (ServiceGate) return _router ??= new AppRouter();
     }
 
     private static object VmRoutingState()

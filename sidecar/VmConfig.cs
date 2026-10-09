@@ -30,6 +30,8 @@ public sealed class VmConfig
     public int MusicStrip { get; private set; } = -1;
     public string? MicName { get; private set; }
     public string MusicEndpointHint { get; private set; } = "";
+    public double UserGainDb { get { lock (_gate) return _userGainDb; } }
+    public bool MusicToVrchat { get { lock (_gate) return MusicStrip >= 0 && _api.TryGetFloat($"Strip[{MusicStrip}].B1", out var value) && value > 0.5f; } }
 
     private double _userGainDb = 0;
     private double _duckOffsetDb = 0;
@@ -286,6 +288,7 @@ public sealed class VmConfig
 
     public bool DuckingEnabled { get { lock (_gate) return _duckingEnabled; } }
     public double DuckThresholdDb { get { lock (_gate) return _duckThresholdDb; } }
+    public double MusicGainDb { get { lock (_gate) return _userGainDb + _duckOffsetDb; } }
 
     public void SetDucked(bool ducked)
     {
@@ -313,6 +316,91 @@ public sealed class VmConfig
         {
             if (MusicStrip < 0) return false;
             return _api.TrySetFloat($"Strip[{MusicStrip}].B1", on ? 1 : 0);
+        }
+    }
+
+    public ConfigResult RestoreBaseline(VoiceMeeterBaseline baseline)
+    {
+        var result = new ConfigResult();
+        if (!_api.TryGetKind(out var kind, out _, out _) || kind != baseline.Kind)
+        {
+            result.Add("voicemeeter", false, "VoiceMeeter is not running the same edition captured in this audio snapshot.");
+            result.Finish();
+            return result;
+        }
+
+        var musicEndpoint = CoreAudio.FindByName(baseline.MusicEndpoint, "render");
+        var musicStrip = musicEndpoint is null ? -1 : VmLayout.ForKind(kind).VirtStart +
+            (musicEndpoint.Name.Contains("Aux", StringComparison.OrdinalIgnoreCase) ? 1 : 0);
+        if (musicStrip != baseline.MusicStrip)
+        {
+            result.Add("voicemeeter", false, "The saved VoiceMeeter music input is missing or its strip changed. No saved VoiceMeeter settings were restored.");
+            result.Finish();
+            return result;
+        }
+
+        var currentA1 = _api.TryGetString("Bus[0].device.name", out var a1) ? a1 : "";
+        var a1Device = _api.ListOutputDevices().FirstOrDefault(device =>
+            OutputDeviceMatches(device.Name, baseline.A1Output) || OutputDeviceMatches(device.HardwareId, baseline.A1Output));
+        if (!OutputDeviceMatches(currentA1, baseline.A1Output) && a1Device is null)
+        {
+            result.Add("voicemeeter", false, $"Saved A1 output '{baseline.A1Output}' is not available in VoiceMeeter. No saved VoiceMeeter settings were restored.");
+            result.Finish();
+            return result;
+        }
+
+        var mic = _api.ListInputDevices().FirstOrDefault(device => DeviceMatches(device.Name, baseline.MicrophoneDevice));
+        var currentMic = _api.TryGetString("Strip[0].device.name", out var micName) ? micName : "";
+        if (!DeviceMatches(currentMic, baseline.MicrophoneDevice) && mic is null)
+        {
+            result.Add("voicemeeter", false, $"Saved microphone '{baseline.MicrophoneDevice}' is not available in VoiceMeeter. No saved VoiceMeeter settings were restored.");
+            result.Finish();
+            return result;
+        }
+
+        if (!OutputDeviceMatches(currentA1, baseline.A1Output) && a1Device is not null)
+            _api.SetString($"Bus[0].device.{a1Device.DriverName}", a1Device.Name);
+        if (!DeviceMatches(currentMic, baseline.MicrophoneDevice) && mic is not null)
+            _api.SetString($"Strip[0].device.{mic.DriverName}", mic.Name);
+
+        var checks = new List<bool>
+        {
+            SetAndVerifyFloat("Strip[0].Mute", baseline.MicMute),
+            SetAndVerifyFloat("Strip[0].A1", baseline.MicA1),
+            SetAndVerifyFloat("Strip[0].B1", baseline.MicB1),
+            SetAndVerifyFloat("Strip[0].Gain", baseline.MicGain),
+            SetAndVerifyFloat($"Strip[{musicStrip}].Mute", baseline.MusicMute),
+            SetAndVerifyFloat($"Strip[{musicStrip}].A1", baseline.MusicA1),
+            SetAndVerifyFloat($"Strip[{musicStrip}].B1", baseline.MusicB1),
+            SetAndVerifyFloat($"Strip[{musicStrip}].Gain", baseline.MusicGain),
+            SetAndVerifyFloat("Bus[0].Mute", baseline.A1Mute),
+            SetAndVerifyFloat($"Bus[{VmLayout.ForKind(kind).B1Index}].Mute", baseline.B1Mute)
+        };
+        var deviceOk = _api.TryGetString("Bus[0].device.name", out var restoredA1) && OutputDeviceMatches(restoredA1, baseline.A1Output) &&
+                       _api.TryGetString("Strip[0].device.name", out var restoredMic) && DeviceMatches(restoredMic, baseline.MicrophoneDevice);
+        var allOk = checks.All(ok => ok) && deviceOk;
+        result.Add("voicemeeter", allOk, allOk ? "Saved VoiceMeeter input devices, sends, mutes, gains, and monitor output restored." : "One or more VoiceMeeter settings could not be restored and verified.");
+        if (allOk)
+        {
+            MusicStrip = musicStrip;
+            MicName = baseline.MicrophoneDevice;
+            MusicEndpointHint = baseline.MusicEndpoint;
+            _userGainDb = Math.Clamp(baseline.MusicGain, -60, 12);
+            _duckOffsetDb = 0;
+            _duckingEnabled = false;
+        }
+        result.Finish();
+        return result;
+    }
+
+    public void RestoreControlState(double userGainDb, bool duckingEnabled)
+    {
+        lock (_gate)
+        {
+            _userGainDb = Math.Clamp(userGainDb, -60, 12);
+            _duckOffsetDb = 0;
+            _duckingEnabled = duckingEnabled;
+            ApplyGain();
         }
     }
 }

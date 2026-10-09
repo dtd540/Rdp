@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { bridge, isElectron, pickMusicEndpoint, pickMics, pickVmOutput, rpc, safeRpc, type AppState, type AudioEndpointInfo, type AudioSettingsScan, type VoiceMeeterRoutingState } from '../bridge';
 import { DEFAULT_MUSIC_BROWSER, MUSIC_BROWSERS, musicBrowser, musicTargetProcess } from '../musicBrowser';
+import { applyMusicSend } from '@shared/audioControls';
 import { MeterBar } from './MeterBar';
+import { AudioBaselineControls } from './AudioBaselineControls';
 import { useWindowVisible } from '../useWindowVisible';
 
 interface Props {
@@ -37,6 +39,8 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   const [liveSession, setLiveSession] = useState<boolean | null>(null);
   const [vrchatOk, setVrchatOk] = useState<boolean | null>(null);
   const [volume, setVolume] = useState(state.musicVolumeDb);
+  const [musicSendBusy, setMusicSendBusy] = useState(false);
+  const [musicSendError, setMusicSendError] = useState('');
   const [selectedMic, setSelectedMic] = useState(state.micEndpointName ?? '');
   const [browserId, setBrowserId] = useState(DEFAULT_MUSIC_BROWSER);
   const [configState, setConfigState] = useState<'checking' | 'ready' | 'error'>('checking');
@@ -288,8 +292,15 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   };
 
   const setMuted = async (muted: boolean) => {
-    await safeRpc('vm.setMusicToVrchat', { on: !muted });
-    await setState({ musicMutedToVrchat: muted });
+    setMusicSendBusy(true);
+    setMusicSendError('');
+    try {
+      await applyMusicSend(!muted, rpc, setState);
+    } catch (error) {
+      setMusicSendError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMusicSendBusy(false);
+    }
   };
 
   const setDucking = async (enabled: boolean) => {
@@ -458,9 +469,10 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
           label="Send music to VRChat mic"
           sub="Off = music only in your ears; your voice still reaches VRChat."
           checked={!state.musicMutedToVrchat}
-          disabled={configState !== 'ready'}
+          disabled={configState !== 'ready' || musicSendBusy}
           onChange={(on) => void setMuted(!on)}
         />
+        {musicSendError && <p className="hint text-warn" role="alert">{musicSendError}</p>}
         <Toggle
           label="Duck music when I talk"
           sub="Music drops 12 dB while your mic hears you speaking."
@@ -469,6 +481,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
           onChange={(v) => void setDucking(v)}
         />
         <div className="divider" />
+        <AudioBaselineControls state={state} setState={setState} />
         <div className="row">
           <button
             className="small ghost"

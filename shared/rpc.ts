@@ -124,8 +124,49 @@ export interface SetupCheck {
 
 export type ServiceId = 'spotify' | 'ytmusic';
 
+export interface AudioEndpointRoleBaseline {
+  role: number;
+  endpointId: string | null;
+  endpointName: string | null;
+  hasSavedValue: boolean;
+}
+
+export interface SpotifyRouteBaseline {
+  pid: number;
+  processName: string;
+  endpoints: AudioEndpointRoleBaseline[];
+}
+
+export interface VoiceMeeterBaseline {
+  kind: number;
+  microphoneDevice: string;
+  a1Output: string;
+  musicEndpoint: string;
+  musicStrip: number;
+  micMute: number;
+  micA1: number;
+  micB1: number;
+  micGain: number;
+  musicMute: number;
+  musicA1: number;
+  musicB1: number;
+  musicGain: number;
+  a1Mute: number;
+  b1Mute: number;
+}
+
+export interface AudioBaseline {
+  capturedAt: string;
+  spotifyRoutes: SpotifyRouteBaseline[];
+  voiceMeeter: VoiceMeeterBaseline;
+  musicVolumeDb: number;
+  musicMutedToVrchat: boolean;
+  duckingEnabled: boolean;
+}
+
 export interface AppState {
   setupComplete: boolean;
+  audioBaseline: AudioBaseline | null;
   activeService: ServiceId | null;
   checks: SetupCheck[];
   musicMutedToVrchat: boolean;
@@ -185,6 +226,8 @@ export interface SteamGame {
 export interface SidecarMethods {
   'endpoints.list': () => AudioEndpointInfo[];
   'audio.scanSettings': () => AudioSettingsScan;
+  'audio.captureBaseline': () => AudioBaseline;
+  'audio.restoreBaseline': (params: { baseline: AudioBaseline }) => VoiceMeeterConfigResult;
   'sessions.list': (params: { endpointId: string }) => AudioSessionInfo[];
   'sessions.findByProcess': (params: { endpointId: string; processName: string }) => AudioSessionInfo | null;
 

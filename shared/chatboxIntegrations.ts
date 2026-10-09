@@ -48,6 +48,7 @@ export interface ChatIntegrationSetting {
   emoji: string;
   format: string;
   showEmoji: boolean;
+  priority?: 'high' | 'normal' | 'low';
 }
 
 export const DEFAULT_CHAT_INTEGRATIONS: ChatIntegrationSetting[] = CHAT_INTEGRATIONS.map(({ id, defaultEnabled, emoji, format }) => ({ id, enabled: defaultEnabled, emoji, format, showEmoji: true }));
@@ -81,7 +82,7 @@ export function normaliseChatIntegrations(raw: unknown): ChatIntegrationSetting[
     const format = typeof item?.format === 'string' && item.format.length <= 100 && !/[\r\n\x00-\x1f\x7f]/.test(item.format) && item.format.includes('{value}') ? item.format : definition.format;
     const emoji = typeof item?.emoji === 'string' && Array.from(item.emoji).length <= 8 && !/[\r\n\x00-\x1f\x7f]/.test(item.emoji) ? item.emoji : definition.emoji;
     const showEmoji = item?.showEmoji !== false;
-    return { id: definition.id, enabled: item ? item.enabled === true : definition.defaultEnabled, emoji, format, showEmoji };
+    return { id: definition.id, enabled: item ? item.enabled === true : definition.defaultEnabled, emoji, format, showEmoji, ...(item?.priority === 'high' || item?.priority === 'normal' || item?.priority === 'low' ? { priority: item.priority } : {}) };
   });
 }
 
@@ -190,11 +191,45 @@ function clockMinutes(totalSeconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-export function composeChatIntegrations(
+export interface ChatComposeOptions {
+  separator?: ChatLineSeparator;
+  frame?: ChatMessageFrameId;
+  frameTop?: string;
+  frameBottom?: string;
+  borderStyle?: ChatBorderStyleId;
+  borderLeft?: string;
+  borderRight?: string;
+  smartFit?: boolean;
+}
+
+/** Preserve the user's base text; remove whole optional lines, never silently clip it. */
+export function composeChatReport(base: string, settings: ChatIntegrationSetting[], values: Partial<Record<ChatIntegrationId, string>>, options: ChatComposeOptions = {}): { text: string; omitted: ChatIntegrationId[]; originalCharacters: number } {
+  const original = composeRawChatIntegrations(base, settings, values, options);
+  const result = { text: original, omitted: [] as ChatIntegrationId[], originalCharacters: Array.from(original).length };
+  if (!options.smartFit) return result;
+  const remaining = [...settings];
+  const rank = { high: 0, normal: 1, low: 2 };
+  const candidates = settings.filter((item) => item.enabled && readable(values[item.id])).map((item, index) => ({ item, index }))
+    .sort((a, b) => rank[b.item.priority ?? 'normal'] - rank[a.item.priority ?? 'normal'] || b.index - a.index);
+  for (const { item } of candidates) {
+    if (Array.from(result.text).length <= 144 && result.text.split('\n').length <= 9) break;
+    const index = remaining.findIndex((entry) => entry.id === item.id);
+    remaining[index] = { ...remaining[index], enabled: false };
+    result.omitted.push(item.id);
+    result.text = composeRawChatIntegrations(base, remaining, values, options);
+  }
+  return result;
+}
+
+export function composeChatIntegrations(base: string, settings: ChatIntegrationSetting[], values: Partial<Record<ChatIntegrationId, string>>, options: ChatComposeOptions = {}): string {
+  return composeChatReport(base, settings, values, options).text;
+}
+
+function composeRawChatIntegrations(
   base: string,
   settings: ChatIntegrationSetting[],
   values: Partial<Record<ChatIntegrationId, string>>,
-  options: { separator?: ChatLineSeparator; frame?: ChatMessageFrameId; frameTop?: string; frameBottom?: string; borderStyle?: ChatBorderStyleId; borderLeft?: string; borderRight?: string } = {}
+  options: ChatComposeOptions = {}
 ): string {
   const lines = settings.filter((item) => item.enabled).flatMap((item) => {
     const value = readable(values[item.id]);
@@ -217,7 +252,7 @@ export function composeCycleIntegrations(
   context: ChatContext,
   settings: ChatIntegrationSetting[],
   values: Partial<Record<ChatIntegrationId, string>>,
-  options: { separator?: ChatLineSeparator; frame?: ChatMessageFrameId; frameTop?: string; frameBottom?: string; borderStyle?: ChatBorderStyleId; borderLeft?: string; borderRight?: string } = {}
+  options: ChatComposeOptions = {}
 ): Array<{ id: string; name: string; text: string }> {
   const cycle = templates.filter((template) => template.cycle);
   if (!cycle.length) throw new Error('Select at least one saved template for the cycle.');
