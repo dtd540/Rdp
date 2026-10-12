@@ -1,6 +1,6 @@
 {
   "name": "spott-experimental",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Route Spotify or YouTube Music through VoiceMeeter into your VRChat microphone — one app, verified setup.",
   "main": "out/main/index.js",
   "author": "SPOTT",
