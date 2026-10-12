@@ -1,7 +1,45 @@
 import { app, BrowserWindow } from 'electron';
 import electronUpdater from 'electron-updater';
-import type { UpdateStatus } from '@shared/update';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { normaliseAppVersion, normaliseReleaseNotes, RELEASE_NOTES_BY_VERSION, type UpdateNotice, type UpdateStatus } from '@shared/update';
+import { loadBundledReleaseNotes } from './updateNotes';
 
+const noticePath = () => path.join(app.getPath('userData'), 'pending-update-notice.json');
+
+function saveUpdateNotice(notice: UpdateNotice): void {
+  try {
+    mkdirSync(app.getPath('userData'), { recursive: true });
+    writeFileSync(noticePath(), JSON.stringify(notice), 'utf8');
+  } catch (error) {
+    console.error('[updater] could not save update notes:', error);
+  }
+}
+
+export function getPendingUpdateNotice(): UpdateNotice | null {
+  try {
+    const saved = JSON.parse(readFileSync(noticePath(), 'utf8')) as Partial<UpdateNotice>;
+    if (typeof saved.version !== 'string' || normaliseAppVersion(saved.version) !== normaliseAppVersion(app.getVersion())) return null;
+    const version = normaliseAppVersion(saved.version);
+    const notes = typeof saved.releaseNotes === 'string' && saved.releaseNotes.trim()
+      ? saved.releaseNotes
+      : RELEASE_NOTES_BY_VERSION[version]?.join('\n\n') ?? loadBundledReleaseNotes(app.getAppPath(), version);
+    return { version: saved.version, ...(notes ? { releaseNotes: notes } : {}) };
+  } catch {
+    return null;
+  }
+}
+
+export function dismissUpdateNotice(): void {
+  try {
+    if (existsSync(noticePath())) unlinkSync(noticePath());
+  } catch (error) {
+    console.error('[updater] could not dismiss update notes:', error);
+    throw error;
+  }
+}
+
+const releaseNotes = (value: unknown, version: string) => normaliseReleaseNotes(value, version);
 const { autoUpdater } = electronUpdater;
 
 let getWindow: (() => BrowserWindow | null) | null = null;
@@ -9,6 +47,7 @@ let initialized = false;
 let checkInFlight = false;
 let downloadedVersion: string | null = null;
 let lastStatus: UpdateStatus | null = null;
+let downloadedReleaseNotes: string | undefined;
 let checkTimer: ReturnType<typeof setInterval> | null = null;
 
 function broadcast(status: UpdateStatus): void {
@@ -27,11 +66,10 @@ export function initializeUpdater(getWin: () => BrowserWindow | null): void {
   autoUpdater.allowPrerelease = false;
 
   autoUpdater.on('checking-for-update', () => broadcast({ state: 'checking' }));
-  autoUpdater.on('update-available', (info) => broadcast({
-    state: 'available',
-    version: info.version,
-    releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined
-  }));
+  autoUpdater.on('update-available', (info) => {
+    downloadedReleaseNotes = releaseNotes(info.releaseNotes, info.version);
+    broadcast({ state: 'available', version: info.version, releaseNotes: downloadedReleaseNotes });
+  });
   autoUpdater.on('update-not-available', (info) => broadcast({ state: 'not-available', version: info.version }));
   autoUpdater.on('download-progress', (progress) => broadcast({
     state: 'progress',
@@ -42,7 +80,13 @@ export function initializeUpdater(getWin: () => BrowserWindow | null): void {
   }));
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info.version;
-    broadcast({ state: 'downloaded', version: info.version });
+    const notes = releaseNotes(info.releaseNotes, info.version) ?? downloadedReleaseNotes ?? RELEASE_NOTES_BY_VERSION[info.version]?.join('\n\n') ?? loadBundledReleaseNotes(app.getAppPath(), info.version);
+    const notice: UpdateNotice = {
+      version: info.version,
+      ...(notes ? { releaseNotes: notes } : {})
+    };
+    saveUpdateNotice(notice);
+    broadcast({ state: 'downloaded', ...notice });
   });
   autoUpdater.on('error', (error) => {
     checkInFlight = false;
@@ -66,11 +110,12 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     const result = await autoUpdater.checkForUpdates();
     checkInFlight = false;
     if (!result) return lastStatus ?? { state: 'error', message: 'Update check is unavailable.' };
-    if (downloadedVersion) return { state: 'downloaded', version: downloadedVersion };
+    if (downloadedVersion) return downloadedStatus();
     const currentStatus = lastStatus;
     if (result.isUpdateAvailable) {
       if (currentStatus?.state === 'available' || currentStatus?.state === 'progress') return currentStatus;
-      const status = { state: 'available' as const, version: result.updateInfo.version };
+      downloadedReleaseNotes = releaseNotes(result.updateInfo.releaseNotes, result.updateInfo.version);
+      const status = { state: 'available' as const, version: result.updateInfo.version, releaseNotes: downloadedReleaseNotes };
       broadcast(status);
       return status;
     }
@@ -92,6 +137,11 @@ export function installDownloadedUpdate(): boolean {
   // second relaunches the app afterwards.
   autoUpdater.quitAndInstall(true, true);
   return true;
+}
+
+function downloadedStatus(): UpdateStatus {
+  if (lastStatus?.state === 'downloaded' && lastStatus.version === downloadedVersion) return lastStatus;
+  return { state: 'downloaded', version: downloadedVersion!, releaseNotes: downloadedReleaseNotes };
 }
 
 export function getUpdateStatus(): UpdateStatus | null {

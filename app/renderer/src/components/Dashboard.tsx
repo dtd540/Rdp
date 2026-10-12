@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FC } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FC } from 'react';
 import { bridge, isElectron, pickMusicEndpoint, pickMics, pickVmOutput, rpc, safeRpc, type AppState, type AudioEndpointInfo, type AudioSettingsScan, type VoiceMeeterRoutingState } from '../bridge';
 import { DEFAULT_MUSIC_BROWSER, MUSIC_BROWSERS, musicBrowser, musicTargetProcess } from '../musicBrowser';
 import { applyMusicSend } from '@shared/audioControls';
@@ -25,18 +25,20 @@ const Toggle: FC<{ label: string; sub?: string; checked: boolean; disabled?: boo
       {sub ? <div className="t-sub">{sub}</div> : null}
     </div>
     <label className="switch">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" aria-label={label} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="slider" />
     </label>
   </div>
 );
 
 export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
+  const [panel, setPanel] = useState<'home' | 'controls' | 'source' | 'devices' | 'signal'>('home');
   const [eps, setEps] = useState<AudioEndpointInfo[]>([]);
   const [tab, setTab] = useState<'spotify' | 'ytmusic'>(state.activeService ?? 'spotify');
   const [routeOk, setRouteOk] = useState<boolean | null>(null);
   const [routeDetail, setRouteDetail] = useState<string | null>(null);
   const [liveSession, setLiveSession] = useState<boolean | null>(null);
+  const [misrouteWarning, setMisrouteWarning] = useState<string | null>(null);
   const [vrchatOk, setVrchatOk] = useState<boolean | null>(null);
   const [volume, setVolume] = useState(state.musicVolumeDb);
   const [musicSendBusy, setMusicSendBusy] = useState(false);
@@ -52,6 +54,18 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   const [scanError, setScanError] = useState<string | null>(null);
   const [applyingConfig, setApplyingConfig] = useState(false);
   const volCommit = useRef<number | null>(null);
+  const deviceTrigger = useRef<HTMLButtonElement>(null);
+  const deviceClose = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setVolume(state.musicVolumeDb); }, [state.musicVolumeDb]);
+  useEffect(() => {
+    if (panel !== 'devices') return;
+    deviceClose.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setPanel('home'); window.setTimeout(() => deviceTrigger.current?.focus(), 0); }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [panel]);
 
   const musicEp = useMemo(() => pickMusicEndpoint(eps), [eps]);
   const musicSourceLabel = tab === 'spotify' ? 'Spotify' : musicBrowser(browserId).label;
@@ -228,6 +242,18 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
       });
       const active = Boolean(s && s.pid > 0 && s.state === 'active');
       setLiveSession(active);
+      if (active) {
+        setMisrouteWarning(null);
+      } else {
+        // Music is not on the VoiceMeeter input: see whether it is playing on another output.
+        const otherOutput = eps.find((endpoint) => endpoint.direction === 'render' && endpoint.isDefault && endpoint.id !== musicEp.id);
+        const elsewhere = otherOutput
+          ? await safeRpc<{ pid: number; state: string } | null>('sessions.findByProcess', { endpointId: otherOutput.id, processName: proc })
+          : null;
+        setMisrouteWarning(otherOutput && elsewhere && elsewhere.pid > 0 && elsewhere.state === 'active'
+          ? `${musicSourceLabel} is playing on ${otherOutput.name}, not the VoiceMeeter music input. Press Connect music to route it.`
+          : null);
+      }
       if (active && configState === 'ready') {
         setRouteOk(true);
         setRouteDetail(`${musicSourceLabel} audio session is active on the VoiceMeeter music input`);
@@ -311,16 +337,77 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
   const musicPeak = musicEp ? peaks[musicEp.id] ?? null : null;
   const micPeak = micEp ? peaks[micEp.id] ?? null : null;
   const vmPeak = vmOutput ? peaks[vmOutput.id] ?? null : null;
+  const meterRing = (label: string, peakDb: number | null, size: 'core' | 'small') => {
+    const level = peakDb === null ? 0 : Math.max(0, Math.min(1, (peakDb + 60) / 60));
+    const sweep = `${(level * 270).toFixed(1)}deg`;
+    const displayLevel = peakDb !== null && peakDb > -99 ? `${Math.round(level * 100)}%` : '—';
+    return <div className={`cockpit-gauge cockpit-gauge-${size}`} style={{ '--sweep': sweep } as CSSProperties} role="img" aria-label={`${label}: ${displayLevel}`}>
+      <svg className="hud-rings" viewBox="0 0 200 200" aria-hidden="true"><circle className="hud-orbit" cx="100" cy="100" r="98"/><circle className="hud-inner-orbit" cx="100" cy="100" r="76"/><path className="hud-triangle" d="M100 49 144 125H56Z"/></svg>
+      <div className="cockpit-gauge-face"><strong>{displayLevel}</strong><span>{label}</span></div>
+    </div>;
+  };
 
   return (
     <div className="dashboard-root">
-      <div className="section-heading dashboard-section-heading"><div><span className="section-kicker">MONITOR YOUR CONNECTION</span><h2>Signal &amp; controls</h2></div></div>
-      <div className="meters">
-        <MeterBar label="♪ Music → VoiceMeeter input" peakDb={musicPeak} />
-        <MeterBar label="🎙 Your microphone" peakDb={micPeak} />
-        <MeterBar label="B1 virtual mic → VRChat" peakDb={vmPeak} right={vrchatOk === false ? 'VRChat not set' : undefined} />
+      <div className="section-heading dashboard-section-heading">
+        <h2>{panel === 'home' ? 'ϟ Dashboard' : panel === 'controls' ? 'Music & voice controls' : panel === 'source' ? 'Music source' : panel === 'devices' ? 'Audio devices' : 'Live signal'}</h2>
+        {panel !== 'home' ? <button type="button" className="small ghost" onClick={() => setPanel('home')}>← Live</button> : !isElectron ? <span className="neon-tag">DEMO AUDIO</span> : null}
       </div>
+      {panel === 'home' && <section className="cockpit" aria-label="Live audio cockpit">
+        <div className="cockpit-status">
+          <span className={`cockpit-status-dot ${configState === 'ready' ? 'is-ready' : ''}`} />
+          <b>{configState === 'ready' ? 'Mixer ready' : 'Mixer needs attention'}</b>
+          <span className="cockpit-status-separator">·</span>
+          <span>{state.musicMutedToVrchat ? 'Mix off' : 'Mix on'}</span>
+          <button type="button" className="cockpit-status-link" ref={deviceTrigger} aria-controls="device-drawer" aria-expanded={false} onClick={() => setPanel('devices')}>Devices <i>↗</i></button>
+        </div>
 
+        <div className="cockpit-instruments">
+          <div className="cockpit-volume">
+            <span className="cockpit-kicker">MUSIC LEVEL</span>
+            <div className="cockpit-volume-dial" style={{ '--sweep': `${Math.max(0, Math.min(1, (volume + 40) / 46)) * 270}deg` } as CSSProperties}>
+              <div className="cockpit-volume-face"><span>♫</span><strong>{Math.round(Math.max(0, Math.min(1, (volume + 40) / 46)) * 100)}<small>%</small></strong></div>
+            </div>
+            <input type="range" aria-label="Music volume" disabled={configState !== 'ready'} min={-40} max={6} step={1} value={volume} onChange={(event) => setVolumeDb(Number(event.target.value))} />
+          </div>
+          <div className="cockpit-center-meter">{meterRing('VRCHAT OUTPUT', vmPeak, 'core')}</div>
+          <div className="cockpit-side-meters">
+            {meterRing('MUSIC', musicPeak, 'small')}
+            {meterRing('VOICE', micPeak, 'small')}
+          </div>
+        </div>
+
+        <div className="cockpit-lower">
+          <div className="cockpit-toggle-cluster">
+            <Toggle label="Mix" sub="Send music to VRChat" checked={!state.musicMutedToVrchat} disabled={configState !== 'ready' || musicSendBusy} onChange={(on) => void setMuted(!on)} />
+            <Toggle label="Duck" sub="Lower music when you speak" checked={state.duckingEnabled} disabled={configState !== 'ready'} onChange={(on) => void setDucking(on)} />
+          </div>
+          <div className="cockpit-source">
+            <div className="cockpit-source-head"><span className="cockpit-kicker">MUSIC SOURCE</span><button type="button" className="cockpit-text-button" onClick={() => setPanel('source')}>More options ↗</button></div>
+            <div className="cockpit-source-tabs" role="group" aria-label="Music source">
+              <button type="button" aria-pressed={tab === 'spotify'} onClick={() => { setTab('spotify'); setRouteOk(null); setRouteDetail(null); setLiveSession(null); }}>Spotify</button>
+              <button type="button" aria-pressed={tab === 'ytmusic'} onClick={() => { setTab('ytmusic'); setRouteOk(null); setRouteDetail(null); setLiveSession(null); }}>YouTube Music</button>
+            </div>
+            {tab === 'ytmusic' && <label className="cockpit-browser-label">Browser<select aria-label="YouTube Music browser" value={browserId} onChange={(event) => { setBrowserId(event.target.value); setRouteOk(null); setRouteDetail(null); setLiveSession(null); }}>{MUSIC_BROWSERS.map((browser) => <option key={browser.id} value={browser.id}>{browser.label}</option>)}</select></label>}
+            <div className="cockpit-source-actions">
+              <button type="button" onClick={() => void bridge.op('openExternal', tab === 'spotify' ? 'spotify:' : 'https://music.youtube.com')}>Open</button>
+              <button type="button" className="primary" onClick={() => void doRoute()}>{routeOk ? 'Connected ✓' : 'Connect music'}</button>
+              <button type="button" className="cockpit-verify" disabled={!musicEp} onClick={() => void checkLive()}>{liveSession ? 'Signal ✓' : 'Verify'}</button>
+            </div>
+            {routeDetail && <p className={`cockpit-route-message ${routeOk ? 'is-ok' : routeOk === false ? 'is-error' : ''}`} role={routeOk === false ? 'alert' : 'status'}>{routeDetail}</p>}
+            {misrouteWarning && <p className="cockpit-route-message is-error" role="alert">{misrouteWarning}</p>}
+          </div>
+        </div>
+        {musicSendError && <p className="inline-notice" role="alert">{musicSendError}</p>}
+      </section>}
+      {panel === 'signal' && <div className="meters">
+        <MeterBar label="Music" peakDb={musicPeak} />
+        <MeterBar label="Voice" peakDb={micPeak} />
+        <MeterBar label="VRChat" peakDb={vmPeak} right={vrchatOk === false ? 'VRChat not set' : undefined} />
+      </div>}
+
+      {panel === 'devices' && <aside className="device-panel hud-device-drawer" id="device-drawer" aria-label="Devices and routing">
+      <div className="hud-drawer-heading"><h2>Devices</h2><button ref={deviceClose} aria-label="Close devices" onClick={() => { setPanel('home'); window.setTimeout(() => deviceTrigger.current?.focus(), 0); }}>×</button></div>
       <div className={`card mixer-config-card ${configState === 'ready' ? 'mixer-config-ready' : configState === 'error' ? 'mixer-config-error' : ''}`}>
         <div className="mixer-config-copy">
           <span className="section-kicker">VOICE &amp; MUSIC MIX</span>
@@ -330,11 +417,11 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
         </div>
         {audioScan ? (
           <div className="inline-notice">
-            <b>Read-only audio scan · {new Date(audioScan.scannedAt).toLocaleTimeString()}</b><br />
+            <details><summary>Audio scan details</summary><b>Read-only audio scan · {new Date(audioScan.scannedAt).toLocaleTimeString()}</b><br />
             Windows playback defaults — media: {audioScan.defaultPlayback?.name ?? 'not found'} · calls: {audioScan.communicationsPlayback?.name ?? 'not found'} · console: {audioScan.consolePlayback?.name ?? 'not found'}<br />
             Windows mic defaults — media: {audioScan.defaultMicrophone?.name ?? 'not found'} · calls: {audioScan.communicationsMicrophone?.name ?? 'not found'} · console: {audioScan.consoleMicrophone?.name ?? 'not found'}<br />
             Spotify session: {audioScan.spotifySessions.map((session) => `${session.endpointName} (${session.state})`).join(', ') || 'no audio session detected'} · A1 matches Windows media default: {audioScan.voiceMeeter.a1MatchesWindowsPlaybackDefault ? 'yes' : 'no'}
-            <div className="row" style={{ marginTop: 10 }}>
+            </details><div className="row" style={{ marginTop: 10 }}>
               <label htmlFor="dashboard-a1-output"><b>VoiceMeeter A1 (what you hear)</b></label>
               <select id="dashboard-a1-output" value={selectedPlaybackName} onChange={(event) => setSelectedPlaybackName(event.target.value)}>
                 {audioScan.physicalPlaybackOutputs.length === 0 ? <option value="">No active physical playback devices</option> : null}
@@ -358,6 +445,9 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
         </div>
       </div>
 
+      <details className="connection-details"><summary>Save / restore audio</summary><AudioBaselineControls state={state} setState={setState} /></details>
+      </aside>}
+      {panel === 'source' && <div className="source-panel">
       <div className="tabs" role="tablist" aria-label="Music service">
         <button type="button" role="tab" aria-selected={tab === 'spotify'} className={`tab ${tab === 'spotify' ? 'active' : ''}`} onClick={() => { setTab('spotify'); setRouteOk(null); setRouteDetail(null); setLiveSession(null); }}>
           Spotify
@@ -368,11 +458,10 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
       </div>
 
       {tab === 'spotify' ? (
-        <div className="card">
-          <h2>Spotify</h2>
+        <div className="card service-card">
+          <h2>♫ Music source</h2>
           <p className="sub">
-            Music plays in the Spotify desktop app; we route its output into the bridge. Keep Spotify on
-            this computer (any account tier).
+            Play a track in Spotify, then connect its audio.
           </p>
           <div className="row">
             <button className="primary" onClick={() => void doRoute()}>
@@ -384,7 +473,7 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
               Verify
             </button>
           </div>
-          <div className="steps">
+          <details className="connection-details"><summary>Connection status <span>{vrchatOk && liveSession ? 'Active' : 'Check'}</span></summary><div className="steps">
             <div className={`step ${routeOk ? 'ok' : routeOk === false ? 'fail' : 'pending'}`}>
               <span className="icon">{routeOk ? '✓' : routeOk === false ? '✗' : '…'}</span>
               <div className="grow">
@@ -409,15 +498,13 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
                 </div>
               </div>
             </div>
-          </div>
+          </div></details>
         </div>
       ) : (
-        <div className="card">
+        <div className="card service-card">
           <h2>YouTube Music</h2>
           <p className="sub">
-            YouTube Music plays in a browser tab. Pick that browser, start a song, then route it.
-            Windows moves audio per application rather than per tab, so everything that browser
-            plays goes to the VoiceMeeter music input — close other tabs that make noise first.
+            Choose your music browser. All its audio is routed—close other noisy tabs.
           </p>
           <div className="row">
             <label htmlFor="dashboard-music-browser"><b>Browser playing YouTube Music</b></label>
@@ -450,12 +537,14 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
         </div>
       )}
 
-      <div className="card">
-        <h2>Controls</h2>
+      </div>}
+      {panel === 'controls' && <div className="card quick-controls">
+        <h2>ϟ Quick controls</h2>
         <div className="row" style={{ marginBottom: 12 }}>
           <span style={{ fontSize: 13 }}>Music volume</span>
           <input
             type="range"
+            aria-label="Music volume"
             disabled={configState !== 'ready'}
             min={-40}
             max={6}
@@ -463,11 +552,11 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
             value={volume}
             onChange={(e) => setVolumeDb(Number(e.target.value))}
           />
-          <span className="pill">{volume > 0 ? `+${volume}` : volume} dB</span>
+          <span className="pill">{Math.round(Math.max(0, Math.min(1, (volume + 40) / 46)) * 100)}%</span>
         </div>
         <Toggle
           label="Send music to VRChat mic"
-          sub="Off = music only in your ears; your voice still reaches VRChat."
+          sub="Your voice stays on."
           checked={!state.musicMutedToVrchat}
           disabled={configState !== 'ready' || musicSendBusy}
           onChange={(on) => void setMuted(!on)}
@@ -475,13 +564,13 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
         {musicSendError && <p className="hint text-warn" role="alert">{musicSendError}</p>}
         <Toggle
           label="Duck music when I talk"
-          sub="Music drops 12 dB while your mic hears you speaking."
+          sub="Lower music while you speak."
           checked={state.duckingEnabled}
           disabled={configState !== 'ready'}
           onChange={(v) => void setDucking(v)}
         />
         <div className="divider" />
-        <AudioBaselineControls state={state} setState={setState} />
+        <details className="connection-details"><summary>Save / restore audio</summary><AudioBaselineControls state={state} setState={setState} /></details>
         <div className="row">
           <button
             className="small ghost"
@@ -491,11 +580,9 @@ export const Dashboard: FC<Props> = ({ state, setState, peaks }) => {
           >
             Run setup again
           </button>
-          <span className="hint">
-            Mic: {state.micEndpointName ?? 'default'} · Music strip: {state.musicEndpointName ?? '?'}
-          </span>
+
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

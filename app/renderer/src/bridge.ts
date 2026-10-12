@@ -10,9 +10,48 @@ import type {
   SteamGame,
   VoiceMeeterConfigResult,
   VoiceMeeterRoutingState,
-  VoiceMeeterState
+  VoiceMeeterState,
+  WallpaperEntry
 } from '@shared/rpc';
-import type { UpdateStatus } from '@shared/update';
+/** Minimal shape of one mock Wallpaper Engine workshop item used in browser preview. */
+export interface MockWallpaperSource {
+  title: string;
+  type: string;
+  video: boolean;
+  previewPath?: string | null;
+  targetPath?: string | null;
+  targetUrl?: string | null;
+}
+/** Mock subscribed/downloaded workshop wallpapers for the browser preview picker. 
+ * Replace or extend this list to change the sample wallpapers shown before the 
+ * desktop app can scan the real Wallpaper Engine library. */
+export const MOCK_WORKSHOP: MockWallpaperSource[] = [
+  {
+    title: 'Sunset Loop',
+    type: 'video',
+    video: true,
+    previewPath: null,
+    targetPath: undefined,
+    targetUrl: null,
+  },
+  {
+    title: 'Abstract Neon',
+    type: 'image',
+    video: false,
+    previewPath: null,
+    targetPath: undefined,
+    targetUrl: null,
+  },
+  {
+    title: 'City Rain',
+    type: 'video',
+    video: true,
+    previewPath: null,
+    targetPath: undefined,
+    targetUrl: null,
+  }
+];
+import type { UpdateNotice, UpdateStatus } from '@shared/update';
 
 export type { UpdateStatus };
 
@@ -40,9 +79,12 @@ export interface Bridge {
   on(cb: (method: string, params: unknown) => void): () => void;
   updates: {
     getStatus(): Promise<UpdateStatus | null>;
+    getPendingNotice(): Promise<UpdateNotice | null>;
+    dismissNotice(): Promise<void>;
     check(): Promise<UpdateStatus>;
     install(): Promise<boolean>;
   };
+  isElectron: boolean;
 }
 
 declare global {
@@ -55,9 +97,10 @@ declare global {
 const injected: Bridge | undefined =
   typeof window !== 'undefined' ? (window as { bridge?: Bridge }).bridge : undefined;
 
+export const isElectron = Boolean(injected);
+
 export const bridge: Bridge = injected ?? createBrowserMock();
 
-export const isElectron = Boolean(injected);
 export const hasNativeWebviews = isElectron && !window.__freebuffPreview;
 
 function createBrowserMock(): Bridge {
@@ -82,6 +125,17 @@ function createBrowserMock(): Bridge {
   };
 
   let mockBackground: BackgroundImage | null = null;
+  const mockWallpapers: WallpaperEntry[] = MOCK_WORKSHOP.map((item, idx) => ({
+    id: String(1000000 + idx),
+    source: 'workshop' as const,
+    title: item.title,
+    type: item.type,
+    backgroundKind: item.video ? ('video' as const) : ('image' as const),
+    previewPath: item.previewPath ?? null,
+    targetPath: item.video ? (item.targetPath ?? null) : null,
+    previewUrl: item.previewPath ?? null,            targetUrl: item.video && item.targetUrl != null ? item.targetUrl : null,
+
+  }))
 
   async function pickFileAsDataUrl(): Promise<{ name: string; url: string }> {
     if (typeof document === 'undefined') {
@@ -156,6 +210,20 @@ function createBrowserMock(): Bridge {
   let mockBaseline: AudioBaseline | null = null;
 
   return {
+    isElectron,
+    getState: async () => state,
+    setState: async (patch) => {
+      state = { ...state, ...patch };
+      return state;
+    },
+    selfInfo: async () => ({ pid: 0, name: 'browser-preview', isPackaged: false }),
+    updates: {
+      getStatus: async () => null,
+      getPendingNotice: async () => null,
+      dismissNotice: async () => undefined,
+      check: async () => ({ state: 'error', message: 'Updates are only available in the installed Windows app.' }),
+      install: async () => false
+    },
     call: async (method: string) => {
       switch (method) {
         case 'endpoints.list':
@@ -175,7 +243,7 @@ function createBrowserMock(): Bridge {
               processName: 'Spotify',
               endpointId: endpoints[1].id,
               endpointName: endpoints[1].name,
-              state: 'active'
+              state: 'active' as const
             }],
             voiceMeeter: { running: true, kind: 'Potato', a1OutputName: 'Speakers (Realtek High Definition Audio)', a1MatchesWindowsPlaybackDefault: true }
           };
@@ -226,7 +294,7 @@ function createBrowserMock(): Bridge {
           } satisfies VoiceMeeterRoutingState;
         case 'sessions.list':
         case 'sessions.findByProcess':
-          return { pid: 4242, processName: 'Spotify', displayName: 'SpotifyAB.SpotifyMusic', state: 'active' } satisfies AudioSessionInfo;
+          return { pid: 4242, processName: 'Spotify', displayName: 'SpotifyAB.SpotifyMusic', state: 'active' as const } satisfies AudioSessionInfo;
         case 'route.app':
           return { ok: true, method: 'api', detail: 'SetPersistedDefaultAudioEndpoint succeeded' };
         case 'route.openAppSettings':
@@ -252,17 +320,6 @@ function createBrowserMock(): Bridge {
         default:
           throw new Error(`bridge unavailable (browser mock has no '${method}')`);
       }
-    },
-    getState: async () => state,
-    setState: async (patch) => {
-      state = { ...state, ...patch };
-      return state;
-    },
-    selfInfo: async () => ({ pid: 0, name: 'browser-preview', isPackaged: false }),
-    updates: {
-      getStatus: async () => null,
-      check: async () => ({ state: 'error', message: 'Updates are only available in the installed Windows app.' }),
-      install: async () => false
     },
     op: async (op, arg) => {
       if (op === 'saveAudioBaseline') {
@@ -297,6 +354,42 @@ function createBrowserMock(): Bridge {
           if (/cancelled/i.test(detail)) return { ok: false, detail: 'cancelled' };
           return { ok: false, detail };
         }
+      }
+      if (op === 'setBackgroundFromWallpaperEngine') {
+        // In the real app this is handled by bridge:op('applyWallpaper', targetPath).
+        // Keep this legacy path for any older renderer code that still calls it.
+        return { ok: false, detail: 'Use the wallpaper picker in Settings instead.' };
+      }
+      if (op === 'listWallpapers') {
+        if (!mockWallpapers) {
+          return { ok: false, detail: 'No downloaded wallpapers yet — install some in Wallpaper Engine first.' };
+        }
+        return { ok: true, wallpapers: mockWallpapers };
+      }
+      if (op === 'refreshWallpapers') {
+        if (!mockWallpapers) {
+          return { ok: false, detail: 'No downloaded wallpapers yet — install some in Wallpaper Engine first.' };
+        }
+        return { ok: true, wallpapers: mockWallpapers };
+      }
+      if (op === 'applyWallpaper') {
+        const target = arg && typeof arg === 'string' ? arg : '';
+        const entry = mockWallpapers?.find((w) => w.targetPath === target);
+        if (!entry) {
+          return { ok: false, detail: 'That wallpaper is no longer available — rescan first.' };
+        }
+        if (!entry.previewUrl && !entry.targetUrl) {
+          return { ok: false, detail: 'That wallpaper cannot be shown in this preview.' };
+        }
+        const image: BackgroundImage = entry.backgroundKind === 'video'
+          ? { path: entry.targetPath ?? '', name: entry.title, url: entry.targetUrl ?? '', animated: true, video: true, broken: !entry.targetUrl }
+          : { path: entry.previewPath ?? '', name: entry.title, url: entry.previewUrl ?? '', animated: false, broken: !entry.previewUrl };
+        mockBackground = image;
+        state = { ...state, backgroundPath: entry.targetPath ?? entry.previewPath ?? ''};
+        return { ok: true, detail: entry.title, image};
+      }
+      if (op === 'refreshBackground') {
+        return mockBackground ? { ok: true, image: mockBackground} : { ok: true};
       }
       if (op === 'detectVrchatOscPort') {
         return { ok: false, detail: 'This browser preview cannot inspect running Windows processes. Use the installed app while VRChat is open.' };

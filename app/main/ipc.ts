@@ -5,7 +5,8 @@ import type { AppState, BridgeOpResult } from '@shared/rpc';
 import type { OpenDialogOptions } from 'electron';
 import type { SidecarClient } from './sidecar';
 import { getState, saveAudioBaseline, setState } from './state';
-import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground } from './background';
+import { BACKGROUND_EXTENSIONS, loadBackground, loadStoredBackground, resolveWorkshopDir } from './background';
+import { listWallpapers as scanWallpapers, refreshWallpapers, wallpaperAsBackgroundTarget } from './wallpapers';
 import { findSteamPath, installUrl, launchUrl, scanSteamGames, scanSteamLibraryResult } from './steam';
 import { appUptimeSeconds, pcSnapshot, recentVrchatWorlds, sendChatbox, vrchatIsRunning, vrchatLogFolder } from './gaming';
 import { chatboxSourcePayload, windowsChatboxSources } from './chatboxSources';
@@ -15,7 +16,7 @@ import { detectVrchatOscReceivePort } from './vrchatOscPort';
 import { parseWorldLink } from '@shared/gaming';
 import { installVoiceMeeter } from './voiceMeeterInstaller';
 import { browserTabAction, disposeBrowserViews, findInBrowserTab, hideBrowserView, initializeBrowserViews, navigateBrowserTab, setBrowserBounds, stopFindInBrowserTab, syncBrowserTabs, zoomBrowserTab } from './browserView';
-import { checkForUpdates, getUpdateStatus, installDownloadedUpdate, initializeUpdater } from './updater';
+import { checkForUpdates, dismissUpdateNotice, getPendingUpdateNotice, getUpdateStatus, installDownloadedUpdate, initializeUpdater } from './updater';
 
 export interface IpcContext {
   sidecar: SidecarClient;
@@ -35,9 +36,12 @@ function readJson<T>(arg: string | undefined): T {
 export function registerIpc(ctx: IpcContext): void {
   const { sidecar } = ctx;
 
-  initializeUpdater(ctx.getWin);
+  // SPOTT is an isolated local experimental build, not on the original release feed.
+  if (app.getName() !== 'SPOTT Experimental') initializeUpdater(ctx.getWin);
   initializeBrowserViews(ctx.getWin);
   ipcMain.handle('updates:getStatus', () => getUpdateStatus());
+  ipcMain.handle('updates:getPendingNotice', () => getPendingUpdateNotice());
+  ipcMain.handle('updates:dismissNotice', () => dismissUpdateNotice());
   ipcMain.handle('updates:check', () => checkForUpdates());
   ipcMain.handle('updates:install', () => installDownloadedUpdate());
 
@@ -163,7 +167,7 @@ export function registerIpc(ctx: IpcContext): void {
         return { ok: true, detail: result.image.name, image: result.image } satisfies BridgeOpResult;
       }
       case 'getBackground': {
-        const result = loadStoredBackground(getState().backgroundPath);
+        const result = await loadStoredBackground(getState().backgroundPath);
         if (!result) return { ok: true } satisfies BridgeOpResult;
         if (result.ok) return { ok: true, image: result.image } satisfies BridgeOpResult;
         return { ok: false, detail: result.detail, image: result.image } satisfies BridgeOpResult;
@@ -171,6 +175,51 @@ export function registerIpc(ctx: IpcContext): void {
       case 'clearBackground':
         setState({ backgroundPath: null });
         return { ok: true } satisfies BridgeOpResult;
+      case 'listWallpapers': {
+        const wallpapers = await scanWallpapers({ userData: app.getPath('userData') });
+        if (!wallpapers) {
+          return { ok: false, detail: 'Wallpaper Engine was not found on this PC.' } satisfies BridgeOpResult;
+        }
+        if (wallpapers.length === 0) {
+          return { ok: false, detail: 'No downloaded wallpapers yet — install some in Wallpaper Engine first.' }satisfies BridgeOpResult;
+        }
+        return { ok: true, wallpapers } satisfies BridgeOpResult;
+      }
+      case 'refreshWallpapers': {
+        const wallpapers = await refreshWallpapers({ userData: app.getPath('userData') });
+        return { ok: true, wallpapers } satisfies BridgeOpResult;
+      }
+      case 'applyWallpaper': {
+        const target = arg ?? '';
+        const workshopDir = await resolveWorkshopDir();
+        const wallpapers = await scanWallpapers({ userData: app.getPath('userData') });
+        const entry = wallpapers?.find((w) => w.targetPath === target);
+        if (!entry) {
+          return { ok: false, detail: 'That wallpaper is no longer downloaded — rescan in Wallpaper Engine.' } satisfies BridgeOpResult;
+        }
+        const targetInfo = wallpaperAsBackgroundTarget(entry, app.getPath('userData'), true);
+        if (!targetInfo.targetPath) {
+          return { ok: false, detail: 'That wallpaper type cannot be used as an app background.' } satisfies BridgeOpResult;
+        }
+        if (targetInfo.kind === 'image') {
+          // Export the Wallpaper Engine preview as a local image we can load.
+          try {
+            const fs = await import('fs');
+            const source = entry.previewPath;
+            if (!source || !fs.existsSync(source)) {
+              return { ok: false, detail: 'The wallpaper preview is missing — rescan in Wallpaper Engine.' } satisfies BridgeOpResult;
+            }
+            fs.copyFileSync(source, targetInfo.targetPath);
+          } catch (error) {
+            return { ok: false, detail: error instanceof Error ? error.message : String(error) } satisfies BridgeOpResult;
+          }
+        }
+        const result = await loadStoredBackground(targetInfo.targetPath, workshopDir);
+        if (!result) return { ok: false, detail: 'That wallpaper could not be loaded.' } satisfies BridgeOpResult;
+        if (!result.ok) return { ok: false, detail: result.detail, image: result.image } satisfies BridgeOpResult;
+        setState({ backgroundPath: targetInfo.targetPath });
+        return { ok: true, detail: entry.title, image: result.image } satisfies BridgeOpResult;
+      }
       case 'scanGames': {
         const steamPath = await findSteamPath();
         if (!steamPath) {
@@ -229,6 +278,13 @@ export function registerIpc(ctx: IpcContext): void {
         const { id, text, forward, findNext } = readJson<{ id?: string; text?: string; forward?: boolean; findNext?: boolean }>(arg);
         if (!id) return { ok: false, detail: 'find needs a tab id' } satisfies BridgeOpResult;
         return { ok: findInBrowserTab(id, String(text ?? ''), forward !== false, findNext === true) } satisfies BridgeOpResult;
+      }
+      case 'refreshBackground': {
+        const workshopDir = await resolveWorkshopDir();
+        const result = await loadStoredBackground(getState().backgroundPath, workshopDir);
+        if (!result) return { ok: true } satisfies BridgeOpResult;
+        if (result.ok) return { ok: true, image: result.image } satisfies BridgeOpResult;
+        return { ok: false, detail: result.detail, image: result.image } satisfies BridgeOpResult;
       }
       case 'browser:findStop': {
         const { id, action } = readJson<{ id?: string; action?: string }>(arg);

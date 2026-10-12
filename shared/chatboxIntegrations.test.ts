@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { applyBorder, applyMessageFrame, normaliseBorderStyle, composeChatIntegrations, normaliseChatIntegrations, composeCycleIntegrations, chatIntegrationValues, chatSourceRequest, formatBytesPerSecond, formatUptime, mediaProgressBar, normaliseLineSeparator, CHAT_BORDER_STYLES, CHAT_MESSAGE_FRAMES, CHAT_INTEGRATIONS, DEFAULT_CHAT_INTEGRATIONS, SOURCE_BACKED_INTEGRATIONS, type ChatIntegrationSetting } from './chatboxIntegrations';
+import { applyBorder, applyMessageFrame, normaliseBorderStyle, applyChatTextStyle, normaliseChatTextStyle, CHAT_TEXT_STYLES, composeChatIntegrations, normaliseChatIntegrations, composeCycleIntegrations, chatIntegrationValues, chatSourceRequest, formatBytesPerSecond, formatUptime, mediaProgressBar, normaliseLineSeparator, CHAT_BORDER_STYLES, CHAT_MESSAGE_FRAMES, CHAT_INTEGRATIONS, DEFAULT_CHAT_INTEGRATIONS, SOURCE_BACKED_INTEGRATIONS, type ChatIntegrationSetting } from './chatboxIntegrations';
 import { normaliseChatboxSettings, cycleOutputs } from './chatboxSettings';
 import { renderChatTemplate, type ChatTemplate } from './chatbox';
+import { lyricAtPosition, parseLrcLyrics } from './lrcLyrics';
 
 const context = { now: new Date('2026-10-06T12:34:56Z'), activity: 'VRChat', status: 'Available', clock24h: true };
 
@@ -44,6 +45,20 @@ describe('Magic Chatbox integrations', () => {
     expect(normaliseBorderStyle('invalid')).toBe('none');
     expect(applyMessageFrame(applyBorder('line', 'stars'), 'lines', '', '')).toBe('━━━━━━━━\n★ line ★\n━━━━━━━━');
   });
+  it('converts message text to Unicode style presets while preserving symbols and emoji', () => {
+    expect(applyChatTextStyle('Hello 123! 🎵', 'plain')).toBe('Hello 123! 🎵');
+    expect(applyChatTextStyle('Hello 123! 🎵', 'serifBold')).toBe('𝐇𝐞𝐥𝐥𝐨 123! 🎵');
+    expect(applyChatTextStyle('Hello 123!', 'sansBold')).toBe('𝗛𝗲𝗹𝗹𝗼 𝟭𝟮𝟯!');
+    expect(applyChatTextStyle('Hello!', 'italic')).toBe('𝐻𝑒𝑙𝑙𝑜!');
+    expect(applyChatTextStyle('Hello 123!', 'monospace')).toBe('𝙷𝚎𝚕𝚕𝚘 𝟷𝟸𝟹!');
+    expect(applyChatTextStyle('Hello 123!', 'doubleStruck')).toBe('ℍ𝕖𝕝𝕝𝕠 𝟙𝟚𝟛!');
+    expect(normaliseChatTextStyle('unknown')).toBe('plain');
+    expect(CHAT_TEXT_STYLES.doubleStruck.label).toBe('Double-struck');
+  });
+  it('styles composed text and integration lines while leaving frames and symbols intact', () => {
+    expect(composeChatIntegrations('Hello', [], {}, { textStyle: 'sansBold' })).toBe('𝗛𝗲𝗹𝗹𝗼');
+    expect(composeChatIntegrations('Hi', [], {}, { textStyle: 'plain', frame: 'stars' })).toBe('★ ─────── ★\nHi\n★ ─────── ★');
+  });
   it('composes the full message with every enabled integration line, the live base text, borders, and frames', () => {
     const settings = normaliseChatIntegrations([
       { id: 'media_status', enabled: true, emoji: '🎵', format: '{emoji} {value}' },
@@ -77,6 +92,7 @@ describe('Magic Chatbox integrations', () => {
   });
   it('asks the host for network data only when that integration is enabled', () => {
     expect(chatSourceRequest(DEFAULT_CHAT_INTEGRATIONS)).toEqual({ windowTitle: false, media: false, battery: false, network: false, currentWorld: false });
+    expect(chatSourceRequest(normaliseChatIntegrations([{ id: 'lyricify_lyrics', enabled: true }])).media).toBe(true);
     const request = chatSourceRequest(normaliseChatIntegrations([
       { id: 'media_status', enabled: true },
       { id: 'component_and_network_stats', enabled: true }
@@ -116,6 +132,16 @@ describe('Magic Chatbox integrations', () => {
     expect(settings[0].id).toBe('manager_tab');
     expect(settings.find((item) => item.id === 'manager_tab')).toMatchObject({ enabled: true, emoji: '📑', format: '{value}' });
     expect(normaliseChatIntegrations(null)).toEqual(DEFAULT_CHAT_INTEGRATIONS);
+  });
+  it('uses local time-coded LRC cues for media playback and hides them when paused by default', () => {
+    const cues = parseLrcLyrics('[00:01.00]First lyric\n[00:03.00]Next lyric');
+    expect(lyricAtPosition(cues, 2)).toBe('First lyric');
+    const playing = chatIntegrationValues({ context, activeTab: 'Magic Chatbox', media: { title: 'Song', status: 'playing', positionSeconds: 2 }, lyricifyLyrics: lyricAtPosition(cues, 2) });
+    const paused = chatIntegrationValues({ context, activeTab: 'Magic Chatbox', media: { title: 'Song', status: 'paused', positionSeconds: 2 }, lyricifyLyrics: lyricAtPosition(cues, 2) });
+    const pausedAllowed = chatIntegrationValues({ context, activeTab: 'Magic Chatbox', media: { title: 'Song', status: 'paused', positionSeconds: 2 }, lyricifyLyrics: lyricAtPosition(cues, 2), options: { lyricifyOnlyPlaying: false } });
+    expect(playing.lyricify_lyrics).toBe('First lyric');
+    expect(paused.lyricify_lyrics).toBe('');
+    expect(pausedAllowed.lyricify_lyrics).toBe('First lyric');
   });
   it('formats all local data without inventing media, lyrics, occupancy, or unavailable worlds', () => {
     const values = chatIntegrationValues({ context, activeTab: 'Magic Chatbox' });

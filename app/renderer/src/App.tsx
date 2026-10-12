@@ -1,211 +1,184 @@
-import { useEffect, useMemo, useRef, useState, type FC } from 'react';
-import { bridge, type AppState, type BackgroundImage } from './bridge';
-import packageInfo from '../../../package.json';
-import { UpdateBanner } from './components/UpdateBanner';
-import { gamerStorageError, useGamerPreferences } from './gamerStore';
+import { useCallback, useEffect, useRef, useState, type FC } from 'react';
+import { bridge, isElectron, type AppState, type BackgroundImage } from './bridge';
+import { saveGamerPreferences } from './gamerStore';
 import { TABS, type TabId } from './tabs';
-
-const BackgroundLayer: FC<{ url: string | null }> = ({ url }) => {
-  if (!url) return null;
-  return <div className="app-bg" style={{ backgroundImage: `url("${url}")` }} aria-hidden="true" />;
-};
+import { UpdateBanner } from './components/UpdateBanner';
+import { StartupSplash } from './components/StartupSplash';
 
 export const App: FC = () => {
   const [state, setState] = useState<AppState | null>(null);
-  const [activeView, setActiveView] = useState<TabId>('hub');
-  const preferences = useGamerPreferences();
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState('');
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [activeView, setActiveView] = useState<TabId>('setup');
   const [sidecarUp, setSidecarUp] = useState(true);
   const [vmRunning, setVmRunning] = useState<boolean | null>(null);
   const [peaks, setPeaks] = useState<Record<string, number>>({});
+  const [splashOpen, setSplashOpen] = useState(true);
   const peaksRef = useRef(peaks);
   peaksRef.current = peaks;
-  const [bgInfo, setBgInfo] = useState<BackgroundImage | null>(null);
-  const background = bgInfo && !bgInfo.broken && bgInfo.url ? bgInfo : null;
-
-  const refreshBackground = useMemo(
-    () => async () => {
-      try {
-        const result = await bridge.op('getBackground');
-        setBgInfo(result.image ?? null);
-      } catch {
-        setBgInfo(null);
-      }
-    },
-    []
-  );
+  const dismissSplash = useCallback(() => setSplashOpen(false), []);
 
   useEffect(() => {
-    void refreshBackground();
-  }, [refreshBackground]);
-
-  useEffect(() => {
-    document.documentElement.dataset.accent = preferences.accent;
-    document.documentElement.classList.toggle('reduce-motion', preferences.reducedMotion);
-  }, [preferences.accent, preferences.reducedMotion]);
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault(); setPaletteOpen((value) => !value); setPaletteQuery('');
-      }
-      if (event.key === 'Escape') setPaletteOpen(false);
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('has-bg', Boolean(background));
-    return () => document.documentElement.classList.remove('has-bg');
-  }, [background]);
-
-  useEffect(() => {
+    let mounted = true;
     void bridge.getState().then((saved) => {
+      if (!mounted) return;
       setState(saved);
-      setActiveView(saved.setupComplete ? 'hub' : 'setup');
-    });
+      setActiveView('mixer');
+    }).catch((error) => console.error('[audio] could not load saved setup:', error));
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
-    const flush = window.setTimeout(() => setPeaks({ ...peaksRef.current }), 120);
-    const unsub = bridge.on((method, params) => {
+    const flush = window.setInterval(() => setPeaks({ ...peaksRef.current }), 130);
+    const unsubscribe = bridge.on((method, params) => {
       if (method === 'meter.update') {
-        const p = params as { endpointId: string; peakDb: number };
-        peaksRef.current = { ...peaksRef.current, [p.endpointId]: p.peakDb };
+        const update = params as { endpointId: string; peakDb: number };
+        peaksRef.current = { ...peaksRef.current, [update.endpointId]: update.peakDb };
       } else if (method === 'sidecar') {
-        const p = params as { up: boolean };
-        setSidecarUp(p.up);
+        setSidecarUp(Boolean((params as { up?: boolean }).up));
       }
     });
     return () => {
-      window.clearTimeout(flush);
-      unsub();
+      window.clearInterval(flush);
+      unsubscribe();
     };
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      setPeaks((prev) => {
-        if (JSON.stringify(prev) === JSON.stringify(peaksRef.current)) return prev;
-        return { ...peaksRef.current };
-      });
-    }, 130);
-    return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    let stop = false;
-    const tick = async () => {
-      const s = await bridge
-        .call('vm.state')
-        .then((r) => r as { running: boolean })
+    let stopped = false;
+    const checkVoiceMeeter = async () => {
+      const result = await bridge.call('vm.state')
+        .then((value) => value as { running: boolean })
         .catch(() => ({ running: false }));
-      if (!stop) setVmRunning(s.running);
+      if (!stopped) setVmRunning(result.running);
     };
-    void tick();
-    const id = window.setInterval(() => void tick(), 4000);
+    void checkVoiceMeeter();
+    const timer = window.setInterval(() => void checkVoiceMeeter(), 4000);
     return () => {
-      stop = true;
-      window.clearInterval(id);
+      stopped = true;
+      window.clearInterval(timer);
     };
   }, []);
 
-  const patchState = useMemo(
-    () => async (patch: Partial<AppState>) => {
-      const next = await bridge.setState(patch);
-      setState(next);
-      if (patch.setupComplete) setActiveView('mixer');
-      return next;
-    },
-    []
-  );
+  const patchState = async (patch: Partial<AppState>): Promise<AppState> => {
+    const next = await bridge.setState(patch);
+    setState(next);
+    if (patch.setupComplete) setActiveView('mixer');
+    return next;
+  };
+
+  const refreshBackground = async (): Promise<void> => {
+    const result = await bridge.op('refreshBackground');
+    const imagePath = result.image?.path;
+    if (result.ok && typeof imagePath === 'string') {
+      setState((prev) => (prev ? { ...prev, backgroundPath: imagePath } : prev));
+    }
+  };
+
+  const backgroundUrl = ((): string | null => {
+    if (!state || !state.backgroundPath) return null;
+    if (state.backgroundPath.startsWith('(preview)')) {
+      return null;
+    }
+    if (bridge.isElectron) {
+      return `asset:///${state.backgroundPath.replace(/^\/[A-Z]:/i, '').replace(/\\/g, '/')}`;
+    }
+    return null;
+  })();
+
+  const splash = splashOpen ? <StartupSplash onDone={dismissSplash} /> : null;
 
   if (!state) {
     return (
-      <div className="app">
-        <BackgroundLayer url={background?.url ?? null} />
-        <div className="content">
-          <div className="hint">Loading…</div>
-        </div>
-      </div>
+      <>
+        <div className="utility-loading"><span className="brand-mark">♫</span><span>Loading SPOTT…</span></div>
+        {splash}
+      </>
     );
   }
 
   const activeTab = TABS.find((tab) => tab.id === activeView) ?? TABS[0];
-  const workspaceTabs = TABS.filter((tab) => tab.section === 'workspace');
-  const systemTabs = TABS.filter((tab) => tab.section === 'system');
-
-  const navItem = (tab: (typeof TABS)[number]) => (
-    <button
-      key={tab.id}
-      type="button"
-      className={`nav-item ${activeView === tab.id ? 'active' : ''}`}
-      title={tab.label}
-      aria-label={tab.label}
-      aria-current={activeView === tab.id ? 'page' : undefined}
-      onClick={() => setActiveView(tab.id)}
-    >
-      <span className="nav-icon">{tab.icon}</span>
-      <span>{tab.label}</span>
-      {activeView === tab.id ? <span className="nav-dot" /> : null}
-    </button>
-  );
 
   return (
-    <div className={`app-shell ${navCollapsed ? 'nav-collapsed' : ''}`}>
-      <BackgroundLayer url={background?.url ?? null} />
-      <aside className="sidebar">
-        <button
-          type="button"
-          className="nav-toggle"
-          onClick={() => setNavCollapsed((v) => !v)}
-          title={navCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-          aria-label={navCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-          aria-expanded={!navCollapsed}
-        >
-          {navCollapsed ? '›' : '‹'}
-        </button>
+    <>
+    <div className="app-shell neon-shell mark-shell">
+      <aside className="neon-sidebar">
         <div className="brand-lockup">
-          <div className="brand-mark"><span>♫</span></div>
-          <div className="brand-name">SOUNDBRIDGE<span>VRCHAT AUDIO</span></div>
+          {/* Secret: the brand mark is the hidden Settings button. */}
+          <button
+            type="button"
+            className="brand-mark"
+            aria-label="Open Settings"
+            onClick={() => setActiveView('settings')}
+          >
+            <svg viewBox="0 0 44 44" fill="none" stroke="currentColor">
+              <circle cx="22" cy="22" r="14" strokeWidth="2" />
+              <path d="M22 12 31 28H13Z" />
+              <circle cx="22" cy="22" r="3" fill="currentColor" />
+            </svg>
+          </button>
+          <div className="brand-name">
+            SPOTT<span>EXPERIMENTAL</span>
+            <small>VRCHAT AUDIO</small>
+          </div>
         </div>
-        <div className="sidebar-label">WORKSPACE</div>
-        {workspaceTabs.map(navItem)}
-        <div className="sidebar-spacer" />
-        {systemTabs.map(navItem)}
-        <div className="sidebar-help">
-          <div className="help-orb">i</div>
-          <div><b>No aux cable needed</b><span>All audio stays on this PC.</span></div>
+        <nav className="neon-nav" aria-label="Audio tools">
+          {TABS.filter((tab) => tab.id !== 'settings').map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`nav-item ${activeView === tab.id ? 'active' : ''}`}
+              aria-current={activeView === tab.id ? 'page' : undefined}
+              onClick={() => setActiveView(tab.id)}
+            >
+              <span className="nav-icon">{tab.icon}</span>
+              <span>{tab.id === 'mixer' ? 'Live' : 'Setup'}</span>
+            </button>
+          ))}
+        </nav>
+        <UpdateBanner />
+        <div className="neon-status" aria-label="Audio status">
+          <span className={`health-chip ${vmRunning ? 'is-ok' : vmRunning === false ? 'is-off' : ''}`}>
+            <i /> <span>VoiceMeeter {vmRunning === null ? 'checking' : vmRunning ? 'ready' : 'offline'}</span>
+          </span>
+          <span className={`health-chip ${sidecarUp ? 'is-ok' : 'is-off'}`}>
+            <i /> <span>Audio {sidecarUp ? 'ready' : 'offline'}</span>
+          </span>
         </div>
-        <div className="sidebar-footer">VRCHAT MUSIC BRIDGE <span>v{packageInfo.version} · WINDOWS</span></div>
       </aside>
 
-      <main className="workspace">
-        <header className="topbar">
-          <div className="topbar-context">
-            <span>{activeTab.immersive ? 'YOUR COMMUNITY' : activeTab.id === 'settings' ? 'YOUR APP' : 'YOUR AUDIO'}</span>
-            <span className="crumb-slash">/</span>
-            <b>{activeTab.label}</b>
-          </div>
-          <button className="command-trigger small" onClick={() => { setPaletteOpen(true); setPaletteQuery(''); }}>Jump to… <kbd>Ctrl K</kbd></button>
-          <div className="health-group">
-            <span className={`health-chip ${vmRunning ? 'is-ok' : vmRunning === false ? 'is-off' : ''}`}>
-              <i /> VoiceMeeter {vmRunning === null ? 'checking' : vmRunning ? 'online' : 'offline'}
-            </span>
-            <span className={`health-chip ${sidecarUp ? 'is-ok' : 'is-off'}`}>
-              <i /> Audio engine {sidecarUp ? 'ready' : 'offline'}
-            </span>
-          </div>
+      <main className="workspace neon-workspace">
+        <header className="neon-titlebar">
+          <span className="title-icon" aria-hidden="true">{activeTab.icon}</span>
+          <h1>{activeTab.label}</h1>
+          <span className="neon-tag">{isElectron ? 'EXPERIMENTAL' : 'DEMO AUDIO · MOCK ROUTING'}</span>
         </header>
-        <div className={`content ${activeTab.immersive ? 'content--immersive' : ''}`}>
-          <UpdateBanner />
-          {gamerStorageError() && <div className="inline-notice" role="alert">{gamerStorageError()}</div>}
-          {activeTab.render({ state, patchState, peaks, background: bgInfo, refreshBackground, activeTab: activeTab.label })}
+
+        {/* Background layer: paints the current wallpaper behind everything. */}
+        {backgroundUrl ? (
+          <div className="app-background" aria-hidden="true">
+            <img
+              src={backgroundUrl}
+              alt=""
+              className="app-background-img"
+              loading="lazy"
+              onError={(event) => {
+                const img = event.currentTarget as HTMLImageElement;
+                img.style.display = 'none';
+              }}
+              onLoad={() => {}}
+            />
+          </div>
+        ) : null}
+
+        <div className="content neon-content">
+          <div key={activeView} className="view-transition">
+            {activeTab.render({ state, patchState, peaks })}
+          </div>
         </div>
       </main>
-      {paletteOpen && <div className="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}><section className="command-palette card" role="dialog" aria-modal="true" aria-label="Jump to a tab"><label className="field-label">Jump to a tab<input autoFocus value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} placeholder="Games, Chatbox, VRChat…" onKeyDown={(event) => { if (event.key === 'Enter') { const tab = TABS.find((item) => item.label.toLowerCase().includes(paletteQuery.toLowerCase())); if (tab) { setActiveView(tab.id); setPaletteOpen(false); } } }} /></label><div className="command-list">{TABS.filter((tab) => tab.label.toLowerCase().includes(paletteQuery.toLowerCase())).map((tab) => <button key={tab.id} onClick={() => { setActiveView(tab.id); setPaletteOpen(false); }}><span className="nav-icon">{tab.icon}</span>{tab.label}<span>↵</span></button>)}</div><p className="hint">Enter opens the first result · Escape closes</p><button className="small ghost" onClick={() => setPaletteOpen(false)}>Close</button></section></div>}
     </div>
+    {splash}
+    </>
   );
 };
+
+export default App;

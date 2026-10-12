@@ -257,13 +257,22 @@ public sealed class VoiceMeeterApi : IDisposable
         EnsureLogin();
         lock (_gate)
         {
-            SleepForDirtyCycle();
-            WaitUntilClean();
-            var buff = new byte[512];
-            var rc = VBVMR_GetParameterStringA(param, buff);
-            if (rc != 0) throw new InvalidOperationException($"Get {param} failed: {rc}");
-            var end = Array.IndexOf(buff, (byte)0);
-            return System.Text.Encoding.ASCII.GetString(buff, 0, end < 0 ? buff.Length : end);
+            // VoiceMeeter can reject parameter reads briefly while the engine is
+            // starting or rebuilding an audio device, so retry before giving up.
+            for (var attempt = 0; ; attempt++)
+            {
+                SleepForDirtyCycle();
+                WaitUntilClean();
+                var buff = new byte[512];
+                var rc = VBVMR_GetParameterStringA(param, buff);
+                if (rc == 0)
+                {
+                    var end = Array.IndexOf(buff, (byte)0);
+                    return System.Text.Encoding.ASCII.GetString(buff, 0, end < 0 ? buff.Length : end);
+                }
+                if (attempt >= 2) throw new InvalidOperationException($"Get {param} failed: {rc}");
+                Thread.Sleep(250 * (attempt + 1));
+            }
         }
     }
 
@@ -271,6 +280,18 @@ public sealed class VoiceMeeterApi : IDisposable
     {
         value = "";
         try { value = GetString(param); return true; } catch { return false; }
+    }
+
+    /// <summary>Polls a string parameter until VoiceMeeter returns a non-empty value.</summary>
+    public string? WaitForString(string param, int timeoutMs = 3000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (true)
+        {
+            if (TryGetString(param, out var value) && !string.IsNullOrWhiteSpace(value)) return value;
+            if (Environment.TickCount64 >= deadline) return null;
+            Thread.Sleep(150);
+        }
     }
 
     public void SetString(string param, string value)

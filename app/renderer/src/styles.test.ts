@@ -60,4 +60,22 @@ describe('theme form controls', () => {
     expect(css).toMatch(/\.discord-bounds-diagnostic\s*\{[^}]*pointer-events:\s*none/);
     expect(css).toMatch(/\.discord-webview-frame\s*\{[^}]*position:\s*relative/);
   });
+
+  it('animates view changes and dialogs without external animation dependencies', () => {
+    expect(css).toMatch(/\.view-transition\s*\{[^}]*animation:\s*view-arrive/);
+    expect(css).toMatch(/@keyframes\s+view-arrive\s*\{/);
+    expect(css).toMatch(/\.modal-backdrop\s*\{[^}]*animation:\s*backdrop-arrive/);
+    expect(css).toMatch(/@keyframes\s+dialog-arrive\s*\{/);
+  });
+
+  it('respects both the app reduced-motion setting and operating-system preference', () => {
+    expect(css).toMatch(/\.reduce-motion\s+\*,\s*\.reduce-motion\s+\*::before,\s*\.reduce-motion\s+\*::after\s*\{[^}]*animation:\s*none\s*!important/);
+    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    expect(css).toMatch(/animation-duration:\s*\.01ms\s*!important/);
+  });
+
+  it('styles the release notes as a readable, scrollable update dialog', () => {
+    expect(css).toMatch(/\.whats-new-dialog\s*\{[^}]*max-height:/);
+    expect(css).toMatch(/\.whats-new-list\s*\{/);
+  });
 });

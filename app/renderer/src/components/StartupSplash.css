@@ -1,0 +1,253 @@
+/* SPOTT startup splash. Every class and keyframe is prefixed with su- so it
+   cannot collide with the app's global styles. Timeline: 8s, see StartupSplash.tsx. */
+
+@font-face {
+  font-family: 'SPOTT Unbounded';
+  src: url('../assets/unbounded-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+.su-splash {
+  --su-gold: #fbb724;
+  --su-ember: #ffa31a;
+  --su-disc: #4a1511;
+  --su-disc-low: #5c1f16;
+  --su-ink: #ffeccc;
+  --su-fs: clamp(2rem, 9vw, 3.5rem);
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+  color: var(--su-ink);
+  font-family: 'SPOTT Unbounded', 'Arial Black', system-ui, sans-serif;
+  background: radial-gradient(120% 90% at 50% 45%, #26100f 0%, #0b0508 62%);
+  transition: opacity 0.5s ease;
+}
+.su-splash.su-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.su-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 48%, rgba(150, 32, 20, 0.38) 0%, rgba(80, 15, 12, 0.16) 30%, transparent 58%);
+  animation: su-bg-glow 8s linear both;
+}
+@keyframes su-bg-glow {
+  0%   { opacity: 0; }
+  28%  { opacity: 0.5; }
+  59%  { opacity: 0.65; }
+  62%  { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* ---------- emblem ---------- */
+.su-emblem {
+  position: relative;
+  width: min(62vw, 300px);
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 0 10px rgba(251, 183, 36, 0.3));
+  animation:
+    su-lift 0.9s cubic-bezier(0.65, 0, 0.25, 1) 4.8s backwards,
+    su-breath 1.5s ease-in-out 6.4s both;
+}
+.su-dot,
+.su-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.su-ring,
+.su-radar {
+  transform-box: view-box;
+  transform-origin: 200px 200px;
+}
+.su-radar { opacity: 0; }
+
+.su-disc-top { fill: var(--su-disc); }
+.su-disc-low { fill: var(--su-disc-low); }
+.su-ring-dashes {
+  fill: none;
+  stroke: var(--su-gold);
+  stroke-width: 7.7;
+  stroke-dasharray: 25.4 19.48;
+}
+.su-mask-draw { fill: none; stroke: #fff; stroke-width: 26; }
+.su-inner { fill: none; stroke: var(--su-gold); stroke-width: 16.5; }
+.su-tri {
+  fill: none;
+  stroke: var(--su-gold);
+  stroke-width: 6.5;
+  stroke-linejoin: round;
+}
+.su-dot {
+  fill: var(--su-gold);
+  filter: drop-shadow(0 0 6px rgba(255, 190, 70, 0.8));
+  animation:
+    su-dot-main 3.4s cubic-bezier(0.3, 0.7, 0.2, 1) 0.2s both,
+    su-dot-flare 1.1s ease-out 0.2s both,
+    su-dot-cool 2.6s ease-out 0.2s both,
+    su-pulse 0.8s ease-in-out 4s;
+}
+.su-ping {
+  fill: none;
+  stroke: var(--su-gold);
+  stroke-width: 2;
+  opacity: 0;
+}
+.su-p1 { animation: su-ping 1.2s cubic-bezier(0.15, 0.6, 0.3, 1) 4.85s backwards; }
+.su-p2 { animation: su-ping 1.2s cubic-bezier(0.15, 0.6, 0.3, 1) 5.1s backwards; }
+.su-wedge { fill: var(--su-ember); opacity: 0.07; }
+.su-sweep-line {
+  stroke: #ffc24d;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+
+.su-disc { animation: su-fade-in 0.9s ease-out 1.8s backwards; }
+.su-mask-draw { animation: su-draw 1.4s cubic-bezier(0.3, 0.7, 0.1, 1) 0.9s backwards; }
+.su-ring { animation: su-ring-spin 2.2s cubic-bezier(0.2, 0.7, 0.2, 1) 0.9s backwards; }
+.su-inner { animation: su-draw 1.3s cubic-bezier(0.45, 0.05, 0.2, 1) 1.3s backwards; }
+.su-tri { animation: su-draw 1.3s cubic-bezier(0.45, 0.05, 0.2, 1) 1.6s backwards; }
+.su-radar { animation: su-radar 1.6s cubic-bezier(0.45, 0.05, 0.55, 0.95) 3s both; }
+
+@keyframes su-dot-main {
+  0%   { opacity: 0; transform: scale(0); }
+  12%  { opacity: 1; transform: scale(0.2); }
+  70%  { opacity: 1; transform: scale(0.2); }
+  82%  { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes su-dot-flare {
+  0%   { filter: drop-shadow(0 0 0 rgba(255, 236, 204, 0)); }
+  35%  { filter: drop-shadow(0 0 22px rgba(255, 236, 204, 1)); }
+  100% { filter: drop-shadow(0 0 6px rgba(255, 190, 70, 0.8)); }
+}
+@keyframes su-dot-cool {
+  0%   { fill: #fff3dc; }
+  100% { fill: #fbb724; }
+}
+@keyframes su-pulse {
+  0%   { scale: 1; }
+  30%  { scale: 0.82; }
+  60%  { scale: 1.12; }
+  100% { scale: 1; }
+}
+@keyframes su-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes su-draw {
+  from { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  to   { stroke-dasharray: 1; stroke-dashoffset: 0; }
+}
+@keyframes su-ring-spin {
+  from { transform: rotate(-120deg); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes su-radar {
+  0%   { opacity: 0; transform: rotate(0deg); }
+  14%  { opacity: 1; }
+  86%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(360deg); }
+}
+@keyframes su-ping {
+  0%   { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0;   transform: scale(5.4); }
+}
+@keyframes su-lift {
+  from { transform: translateY(calc((var(--su-fs) * 1.1 + 1.25rem) / 2)); }
+  to   { transform: translateY(0); }
+}
+@keyframes su-breath {
+  0%   { filter: drop-shadow(0 0 10px rgba(251, 183, 36, 0.3)); }
+  45%  { filter: drop-shadow(0 0 28px rgba(255, 190, 60, 0.85)); }
+  100% { filter: drop-shadow(0 0 12px rgba(251, 183, 36, 0.4)); }
+}
+
+/* ---------- wordmark ---------- */
+.su-wm {
+  position: relative;
+  margin-top: 1.25rem;
+  height: calc(var(--su-fs) * 1.1);
+  display: inline-flex;
+  align-items: center;
+  padding-left: 0.16em;
+  font-size: var(--su-fs);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--su-ink);
+  text-shadow: 0 0 24px rgba(251, 183, 36, 0.3);
+  animation: su-wm-glow 1.5s ease-in-out 6.4s both;
+}
+.su-wm span {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  animation: su-letter-in 0.7s cubic-bezier(0.2, 0.9, 0.2, 1) calc(5s + var(--i) * 0.24s) backwards;
+}
+.su-spot {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 100%;
+  width: 7rem;
+  height: 7rem;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 175, 50, 0.45) 0%, rgba(255, 150, 31, 0.12) 45%, transparent 70%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  pointer-events: none;
+  animation: su-sweep-spot 1.25s linear 4.95s backwards;
+}
+@keyframes su-wm-glow {
+  0%   { text-shadow: 0 0 24px rgba(251, 183, 36, 0.3); }
+  45%  { text-shadow: 0 0 36px rgba(255, 190, 60, 0.8); }
+  100% { text-shadow: 0 0 24px rgba(251, 183, 36, 0.35); }
+}
+@keyframes su-letter-in {
+  0%   { opacity: 0; transform: translateY(16px) scale(0.9); filter: blur(10px); color: #fff3dc; }
+  60%  { color: #fff3dc; }
+  100% { opacity: 1; transform: none; filter: blur(0); color: var(--su-ink); }
+}
+@keyframes su-sweep-spot {
+  0%   { left: 0%;   opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+/* ---------- progress bar ---------- */
+.su-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(255, 236, 204, 0.06);
+}
+.su-bar i {
+  display: block;
+  height: 100%;
+  background: var(--su-gold);
+  opacity: 0.55;
+  transform-origin: left;
+  animation: su-progress 8s linear both;
+}
+@keyframes su-progress {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}

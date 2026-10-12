@@ -32,7 +32,7 @@ export const CHAT_INTEGRATIONS: ChatIntegrationDefinition[] = [
   { id: 'manager_tab', label: 'Current app tab', description: 'Shows the active tab inside VRChat Music Bridge.', source: 'local', defaultEnabled: false, emoji: '📑', format: '{emoji} {value}' },
   { id: 'current_time', label: 'Current time', description: 'Show the current time on this PC in the chatbox.', source: 'local', defaultEnabled: false, emoji: '🕐', format: '{emoji} {value}' },
   { id: 'media_status', label: 'Media status', description: 'Show the title, artist, and playback progress of your current media session when available.', source: 'local', defaultEnabled: false, emoji: '🎵', format: '{emoji} {value}' },
-  { id: 'lyricify_lyrics', label: 'Lyricify lyrics', description: 'Show the live synced lyric line for the song you are playing. No lyrics provider is connected here, so this stays unavailable.', source: 'external', defaultEnabled: false, emoji: '🎤', format: '{emoji} {value}' },
+  { id: 'lyricify_lyrics', label: 'Synchronized lyrics', description: 'Show the current line from a local .lrc lyrics file alongside Windows media playback. Nothing is uploaded.', source: 'local', defaultEnabled: false, emoji: '🎤', format: '{emoji} {value}' },
   { id: 'component_and_network_stats', label: 'Component & network stats', description: 'Show how much memory this PC has in use and its current network throughput across active adapters.', source: 'local', defaultEnabled: false, emoji: '📊', format: '{emoji} {value}' },
   { id: 'system_stats', label: 'System stats', description: 'Show live CPU and memory usage of your PC.', source: 'local', defaultEnabled: false, emoji: '💻', format: '{emoji} {value}' },
   { id: 'current_world', label: 'Current world', description: 'Show the VRChat world you are currently in. Requires VRChat to be running and a recent local log to have a current world name.', source: 'local', defaultEnabled: false, emoji: '🌍', format: '{emoji} {value}' },
@@ -61,7 +61,7 @@ export function chatSourceRequest(settings: ChatIntegrationSetting[]): { windowT
   const enabled = (id: ChatIntegrationId) => settings.some((item) => item.id === id && item.enabled);
   return {
     windowTitle: enabled('window_activity'),
-    media: enabled('media_status'),
+    media: enabled('media_status') || enabled('lyricify_lyrics'),
     battery: enabled('pc_battery'),
     network: enabled('component_and_network_stats'),
     currentWorld: false
@@ -191,8 +191,50 @@ function clockMinutes(totalSeconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
+export const CHAT_TEXT_STYLES = {
+  plain: { label: 'Classic', description: 'Regular text with maximum font compatibility.' },
+  serifBold: { label: 'Serif bold', description: 'Heavy elegant Unicode letterforms.' },
+  sansBold: { label: 'Sans bold', description: 'Clean, extra-bold Unicode letterforms.' },
+  italic: { label: 'Italic serif', description: 'Slanted Unicode letterforms.' },
+  monospace: { label: 'Monospace', description: 'Console-style Unicode letterforms.' },
+  doubleStruck: { label: 'Double-struck', description: 'Outlined, math-inspired Unicode letterforms.' }
+} as const;
+
+export type ChatTextStyleId = keyof typeof CHAT_TEXT_STYLES;
+
+export function normaliseChatTextStyle(raw: unknown): ChatTextStyleId {
+  return typeof raw === 'string' && Object.prototype.hasOwnProperty.call(CHAT_TEXT_STYLES, raw) ? raw as ChatTextStyleId : 'plain';
+}
+
+const DOUBLE_STRUCK_CAPITALS = Array.from('𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ');
+
+export function applyChatTextStyle(text: string, style: ChatTextStyleId): string {
+  if (style === 'plain') return text;
+  const ranges = {
+    serifBold: { upper: 0x1d400, lower: 0x1d41a },
+    sansBold: { upper: 0x1d5d4, lower: 0x1d5ee, digit: 0x1d7ec },
+    italic: { upper: 0x1d434, lower: 0x1d44e },
+    monospace: { upper: 0x1d670, lower: 0x1d68a, digit: 0x1d7f6 },
+    doubleStruck: { lower: 0x1d552, digit: 0x1d7d8 }
+  }[style];
+  const upper = 'upper' in ranges ? ranges.upper : undefined;
+  const digit = 'digit' in ranges ? ranges.digit : undefined;
+  return Array.from(text, (character) => {
+    const code = character.codePointAt(0)!;
+    if (style === 'doubleStruck' && code >= 65 && code <= 90) return DOUBLE_STRUCK_CAPITALS[code - 65];
+    if (upper !== undefined && code >= 65 && code <= 90) return String.fromCodePoint(upper + code - 65);
+    if (code >= 97 && code <= 122) {
+      if (style === 'italic' && code === 104) return 'ℎ';
+      return String.fromCodePoint(ranges.lower + code - 97);
+    }
+    if (digit !== undefined && code >= 48 && code <= 57) return String.fromCodePoint(digit + code - 48);
+    return character;
+  }).join('');
+}
+
 export interface ChatComposeOptions {
   separator?: ChatLineSeparator;
+  textStyle?: ChatTextStyleId;
   frame?: ChatMessageFrameId;
   frameTop?: string;
   frameBottom?: string;
@@ -244,7 +286,10 @@ function composeRawChatIntegrations(
   const safeBase = typeof base === 'string' ? base.trim().split('\n').map((line) => line.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ' ').trim()).join('\n') : '';
   const separator = options.separator === 'pipe' ? ' ┆ ' : '\n';
   const joined = [safeBase, ...lines].filter(Boolean).join(separator);
-  return applyMessageFrame(joined, normaliseMessageFrame(options.frame ?? 'none'), options.frameTop, options.frameBottom);
+  return applyChatTextStyle(
+    applyMessageFrame(joined, normaliseMessageFrame(options.frame ?? 'none'), options.frameTop, options.frameBottom),
+    normaliseChatTextStyle(options.textStyle)
+  );
 }
 
 export function composeCycleIntegrations(
@@ -388,7 +433,7 @@ export function chatIntegrationValues(input: {
     current_date: context.now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }),
     current_world: input.currentWorld ? (input.vrchatRunning === false ? '' : (options.worldPrefixed ? `In ${input.currentWorld}` : input.currentWorld)) : '',
     instance_players: input.instanceOccupancy != null ? `${input.instanceOccupancy} in instance` : '',
-    lyricify_lyrics: input.lyricifyLyrics ?? '',
+    lyricify_lyrics: options.lyricifyOnlyPlaying && media?.status !== 'playing' ? '' : (input.lyricifyLyrics ?? ''),
     app_uptime: input.appUptimeSeconds == null ? '' : (options.uptimePrefixed ? `Up ${formatUptime(input.appUptimeSeconds)}` : formatUptime(input.appUptimeSeconds)),
     system_stats: (Number.isFinite(input.cpuPercent ?? NaN) ? `CPU ${Math.round(input.cpuPercent ?? 0)}%` : '') + (input.memoryTotal != null && input.memoryUsed != null ? ` · RAM ${Math.round((input.memoryUsed / input.memoryTotal) * 100)}%` : ''),
     component_and_network_stats: [

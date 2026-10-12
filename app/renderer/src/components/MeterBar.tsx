@@ -13,7 +13,7 @@ export const MeterBar: FC<{ label: string; peakDb: number | null; right?: string
       <div className="label">
         <b>{label}</b>
         <span className="value">
-          {right ?? (live ? `${db.toFixed(0)} dB` : '—')}
+          {right ?? (live ? `${Math.round(pct)}%` : '—')}
         </span>
       </div>
       <div className="bar">

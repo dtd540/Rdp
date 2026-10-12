@@ -141,9 +141,8 @@ public static class AudioBaselineManager
     }
 
     private static string RequiredString(VoiceMeeterApi api, string parameter) =>
-        api.TryGetString(parameter, out var value) && !string.IsNullOrWhiteSpace(value)
-            ? value
-            : throw new InvalidOperationException($"Could not read VoiceMeeter setting {parameter}.");
+        api.WaitForString(parameter, 4000)
+            ?? throw new InvalidOperationException($"Could not read VoiceMeeter setting {parameter}. VoiceMeeter may still be starting — open it and save again.");
 
     private static float RequiredFloat(VoiceMeeterApi api, string parameter) =>
         api.TryGetFloat(parameter, out var value)

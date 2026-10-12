@@ -1,9 +1,9 @@
 {
-  "name": "vrchat-music-bridge",
-  "version": "0.3.4",
+  "name": "spott-experimental",
+  "version": "0.3.5",
   "description": "Route Spotify or YouTube Music through VoiceMeeter into your VRChat microphone — one app, verified setup.",
   "main": "out/main/index.js",
-  "author": "VRChat Music Bridge",
+  "author": "SPOTT",
   "license": "MIT",
   "private": true,
   "repository": {
@@ -26,10 +26,13 @@
       "output": "release"
     },
     "appId": "dev.vcbridge.music",
-    "productName": "VRChat Music Bridge",
+    "productName": "SPOTT Experimental",
     "files": [
       "out/**",
-      "shared/**"
+      "shared/**",
+      "docs/CHANGELOG.md",
+      "build/spott-tray.png",
+      "build/spott.png"
     ],
     "extraResources": [
       {
@@ -38,25 +41,25 @@
       }
     ],
     "win": {
+      "icon": "build/spott.ico",
       "target": [
         "nsis"
       ],
-      "artifactName": "VRChat-Music-Bridge-Setup-${version}.${ext}",
-      "signAndEditExecutable": false
+      "artifactName": "SPOTT-Experimental-Setup-${version}.${ext}",
+      "signAndEditExecutable": true
     },
     "nsis": {
+      "installerIcon": "build/spott.ico",
+      "uninstallerIcon": "build/spott.ico",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "dtd540",
-        "repo": "Rdp-releases",
-        "private": false,
-        "releaseType": "release"
-      }
-    ]
+    "publish": {
+      "provider": "github",
+      "owner": "dtd540",
+      "repo": "Rdp-releases",
+      "releaseType": "release"
+    }
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

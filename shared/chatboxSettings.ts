@@ -1,6 +1,6 @@
 import { renderChatTemplate, type ChatContext, type ChatTemplate } from './chatbox';
 import { validateChatText } from './gaming';
-import { normaliseChatIntegrationOptions, normaliseChatIntegrations, normaliseLineSeparator, normaliseMessageFrame, normaliseBorderStyle, type ChatBorderStyleId, type ChatIntegrationSetting, type ChatIntegrationOptions, type ChatLineSeparator, type ChatMessageFrameId } from './chatboxIntegrations';
+import { normaliseChatIntegrationOptions, normaliseChatIntegrations, normaliseLineSeparator, normaliseMessageFrame, normaliseBorderStyle, normaliseChatTextStyle, type ChatBorderStyleId, type ChatTextStyleId, type ChatIntegrationSetting, type ChatIntegrationOptions, type ChatLineSeparator, type ChatMessageFrameId } from './chatboxIntegrations';
 
 export const SETTINGS_VERSION = 2;
 
@@ -11,6 +11,7 @@ export interface ChatboxSettings {
   port: number;
   sound: boolean;
   smartFit: boolean;
+  randomCycle: boolean;
   sendImmediately: boolean;
   intervalSeconds: number;
   clock24h: boolean;
@@ -19,6 +20,7 @@ export interface ChatboxSettings {
   integrationOptions: ChatIntegrationOptions;
   lineSeparator: ChatLineSeparator;
   messageFrame: ChatMessageFrameId;
+  textStyle: ChatTextStyleId;
   frameTop: string;
   frameBottom: string;
   borderStyle: ChatBorderStyleId;
@@ -28,8 +30,8 @@ export interface ChatboxSettings {
 export const DEFAULT_CHATBOX_SETTINGS: ChatboxSettings = {
   version: SETTINGS_VERSION,
   activity: 'Hanging out in VRChat', status: 'Available to chat', port: 9000,
-  sound: false, smartFit: true, sendImmediately: true, intervalSeconds: 30, clock24h: false, clockSeconds: false, integrations: normaliseChatIntegrations(null),
-  integrationOptions: normaliseChatIntegrationOptions(null), lineSeparator: 'newline', messageFrame: 'none', frameTop: '', frameBottom: '',
+  sound: false, smartFit: true, randomCycle: false, sendImmediately: true, intervalSeconds: 30, clock24h: false, clockSeconds: false, integrations: normaliseChatIntegrations(null),
+  integrationOptions: normaliseChatIntegrationOptions(null), lineSeparator: 'newline', messageFrame: 'none', textStyle: 'plain', frameTop: '', frameBottom: '',
   borderStyle: 'none', borderLeft: '', borderRight: ''
 };
 export function normaliseChatboxSettings(raw: unknown): ChatboxSettings {
@@ -42,18 +44,30 @@ export function normaliseChatboxSettings(raw: unknown): ChatboxSettings {
     status: typeof value.status === 'string' ? value.status.slice(0, 60) : DEFAULT_CHATBOX_SETTINGS.status,
     port: Number.isInteger(value.port) && value.port! >= 1024 && value.port! <= 65535 ? value.port! : 9000,
     sound: value.sound === true, smartFit: value.smartFit !== false, sendImmediately: value.sendImmediately !== false,
-    intervalSeconds: [15, 30, 60, 120].includes(value.intervalSeconds ?? 0) ? value.intervalSeconds! : 30,
+    intervalSeconds: [5, 10, 15, 30, 60, 120].includes(value.intervalSeconds ?? 0) ? value.intervalSeconds! : 30,
+    randomCycle: value.randomCycle === true,
     clock24h: value.clock24h === true, clockSeconds: value.clockSeconds === true,
     integrations: poisonedEmojiFlags ? integrations.map((item) => ({ ...item, showEmoji: true })) : integrations,
     integrationOptions: normaliseChatIntegrationOptions(value.integrationOptions),
     lineSeparator: normaliseLineSeparator(value.lineSeparator),
     messageFrame: normaliseMessageFrame(value.messageFrame),
+    textStyle: normaliseChatTextStyle(value.textStyle),
     frameTop: typeof value.frameTop === 'string' ? value.frameTop.slice(0, 24).replace(/[\r\n\x00-\x1f\x7f]/g, ' ') : '',
     frameBottom: typeof value.frameBottom === 'string' ? value.frameBottom.slice(0, 24).replace(/[\r\n\x00-\x1f\x7f]/g, ' ') : '',
     borderStyle: normaliseBorderStyle(value.borderStyle),
     borderLeft: typeof value.borderLeft === 'string' ? value.borderLeft.slice(0, 12).replace(/[\r\n\x00-\x1f\x7f]/g, ' ') : '',
     borderRight: typeof value.borderRight === 'string' ? value.borderRight.slice(0, 12).replace(/[\r\n\x00-\x1f\x7f]/g, ' ') : ''
   };
+}
+
+export function randomCycleIndex(length: number, previousIndex: number, random: () => number = Math.random): number {
+  if (!Number.isInteger(length) || length <= 0) return -1;
+  if (length === 1) return 0;
+  const roll = Math.min(0.999999999, Math.max(0, random()));
+  const candidate = Math.floor(roll * length);
+  if (candidate !== previousIndex) return candidate;
+  const offset = Math.floor(Math.min(0.999999999, Math.max(0, random())) * (length - 1));
+  return (candidate + 1 + offset) % length;
 }
 
 export function cycleOutputs(templates: ChatTemplate[], context: ChatContext): Array<{ id: string; name: string; text: string }> {

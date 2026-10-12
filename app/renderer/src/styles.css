@@ -478,6 +478,8 @@ body {
 
 button, select, input { font: inherit; }
 button { border-radius: 9px; font-weight: 600; padding: 10px 15px; }
+button:not(:disabled) { transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .2s ease, transform .18s cubic-bezier(.2,.8,.2,1); }
+button:not(:disabled):active { transform: scale(.975); }
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -506,9 +508,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   display: grid; place-items: center; width: 22px; height: 36px; padding: 0;
   border: 1px solid var(--border); border-radius: 7px; color: var(--muted);
   background: var(--bg2); font-size: 13px; line-height: 1; cursor: pointer;
-  transition: color .15s ease, border-color .15s ease, background .15s ease;
+  transition: color .15s ease, border-color .15s ease, background .15s ease, transform .18s ease;
 }
 .nav-toggle:hover { color: var(--text); border-color: var(--accent); background: rgba(29, 155, 240, .12); }
+.nav-toggle:active { transform: translateY(-50%) scale(.94); }
 .app-shell.nav-collapsed .sidebar { width: 62px; flex-basis: 62px; padding: 18px 8px 12px; }
 .app-shell.nav-collapsed .brand-lockup { justify-content: center; padding: 0 0 22px; }
 .app-shell.nav-collapsed .brand-name,
@@ -528,6 +531,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   box-shadow: 0 0 16px rgba(29, 155, 240, .4);
 }
 .brand-mark span { transform: translateY(-1px); }
+.brand-mark { animation: brand-arrive .7s cubic-bezier(.2,.8,.2,1) both; }
+.brand-mark span { display: inline-block; animation: brand-note .9s .28s cubic-bezier(.2,.8,.2,1) both; }
+/* The brand mark doubles as the hidden Settings button: keep the logo look, and never draw a ring, glow, or hover effect — any of them would give the secret away. */
+button.brand-mark { border: 0; padding: 0; font: inherit; cursor: pointer; }
+button.brand-mark, button.brand-mark:focus, button.brand-mark:focus-visible { outline: none; }
+@keyframes brand-arrive { from { opacity: 0; transform: scale(.72) rotate(-14deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes brand-note { from { opacity: 0; transform: translateY(5px) rotate(-10deg); } to { opacity: 1; transform: translateY(-1px) rotate(0); } }
 .brand-name { font-size: 15px; font-weight: 800; letter-spacing: .05em; line-height: 1.25; }
 .brand-name span { display: block; color: var(--muted); font-size: 9px; letter-spacing: .12em; margin-top: 4px; }
 .sidebar-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; padding: 0 11px 10px; }
@@ -538,8 +548,14 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .nav-item:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,.08); }
 .nav-item.active:hover:not(:disabled) { color: var(--text); background: rgba(29, 155, 240, .15); }
 .nav-item.active { color: var(--text); background: rgba(29, 155, 240, .12); }
-.nav-icon { width: 22px; color: currentColor; font-size: 18px; text-align: center; }
-.nav-dot { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--accent); }
+.nav-item { transition: color .16s ease, background-color .16s ease, transform .16s ease; }
+.nav-item:hover:not(:disabled) { transform: translateX(2px); }
+.nav-icon { display: inline-block; width: 22px; color: currentColor; font-size: 18px; text-align: center; transition: transform .2s cubic-bezier(.2,.8,.2,1); }
+.nav-item:hover:not(:disabled) .nav-icon { transform: scale(1.12); }
+.nav-item.active .nav-icon { animation: nav-icon-arrive .26s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes nav-icon-arrive { from { transform: scale(.82); } to { transform: scale(1); } }
+.nav-dot { width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--accent); animation: nav-dot-arrive .24s ease-out both; }
+@keyframes nav-dot-arrive { from { opacity: 0; transform: scale(.35); } to { opacity: 1; transform: scale(1); } }
 .sidebar-spacer { flex: 1; min-height: 24px; }
 .sidebar-help { display: flex; gap: 10px; padding: 13px 11px; border: 1px solid #29263b; border-radius: 11px; background: linear-gradient(145deg, rgba(133, 96, 255, .1), rgba(17, 20, 33, .5)); }
 .help-orb { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(133, 96, 255, .2); color: #b9a6ff; font-size: 12px; font-weight: 800; }
@@ -549,6 +565,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .sidebar-footer { padding: 18px 10px 0; color: #747a90; font-size: 8px; font-weight: 800; letter-spacing: .12em; }
 .sidebar-footer span { display: block; margin-top: 5px; color: #555c71; font-weight: 600; }
 .workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; overflow: hidden; }
+.view-transition { width: 100%; min-width: 0; animation: view-arrive .32s cubic-bezier(.2,.8,.2,1) both; }
+.view-transition--immersive { display: flex; flex: 1; min-height: 0; }
+@keyframes view-arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .topbar {
   min-height: 61px; display: flex; align-items: center; justify-content: space-between; gap: 14px;
   background: rgba(9, 9, 9, .85); border-bottom: 1px solid var(--border);
@@ -604,6 +623,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 
 .page-hero {
   position: relative; overflow: hidden; padding: 28px 29px 19px; margin-bottom: 31px;
+  animation: panel-arrive .42s .06s cubic-bezier(.2,.8,.2,1) both;
   border: 1px solid var(--border); border-radius: 17px;
   background: var(--panel);
   box-shadow: var(--shadow);
@@ -640,6 +660,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .route-footnote { position: relative; z-index: 1; display: flex; align-items: center; gap: 7px; margin: 13px 2px 0; color: var(--muted); font-size: 10px; }
 .route-footnote-icon { color: var(--accent); font-size: 13px; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin: 0 2px 15px; }
+.card, .setup-card, .meter, .gamer-stat, .gamer-quick, .integration-item, .game-card { animation: panel-arrive .38s cubic-bezier(.2,.8,.2,1) both; }
+.gamer-quick:hover:not(:disabled) { transform: translateY(-2px); border-color: rgba(133, 96, 255, .4); }
+.gamer-quick-grid > :nth-child(2), .gamer-stat-grid > :nth-child(2), .games-grid > :nth-child(2) { animation-delay: .035s; }
+.gamer-quick-grid > :nth-child(3), .gamer-stat-grid > :nth-child(3), .games-grid > :nth-child(3) { animation-delay: .07s; }
+.gamer-quick-grid > :nth-child(4), .gamer-stat-grid > :nth-child(4), .games-grid > :nth-child(4) { animation-delay: .105s; }
+@keyframes panel-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .section-heading h2 { margin: 5px 0 0; font-size: 19px; font-weight: 700; letter-spacing: -.025em; }
 .setup-count { color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .13em; }
 .setup-count i { color: var(--muted); font-style: normal; }
@@ -794,7 +820,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .gamer-hero h1 { font-size: clamp(25px,3vw,36px); line-height: 1.2; margin: 12px 0; letter-spacing: -.04em; }
 .gamer-hero h1 em { color: var(--accent2); font-style: normal; }
 .gamer-hero p { max-width: 580px; font-size: 12px; line-height: 1.7; color: var(--muted); margin: 0; }
-.gamer-hero-orbit { font-size: 76px; color: var(--accent2); opacity: .55; padding: 0 16px; }
+.gamer-hero-orbit { font-size: 76px; color: var(--accent2); opacity: .55; padding: 0 16px; animation: orbit-drift 5s ease-in-out infinite; }
+@keyframes orbit-drift { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-6px) rotate(5deg); } }
 .gamer-quick-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin-bottom: 24px; }
 .gamer-quick { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 16px 12px; text-align: left; background: var(--panel); }
 .gamer-quick > span { color: #bdbdbd; font-size: 23px; }
@@ -1088,10 +1115,22 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .games-grid.is-compact { grid-template-columns: repeat(auto-fill,minmax(175px,1fr)); gap: 9px; }
 .games-grid.is-compact .game-copy { padding: 9px; }
 .games-grid.is-compact .game-actions { gap: 4px; flex-wrap: wrap; }
-.modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; animation: backdrop-arrive .18s ease-out both; }
+.modal-backdrop > .card { animation: dialog-arrive .24s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes backdrop-arrive { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialog-arrive { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.whats-new-backdrop { z-index: 120; }
+.whats-new-dialog { width: min(540px, 100%); max-height: min(82vh, 680px); overflow-y: auto; padding: 28px; border-color: rgba(133, 96, 255, .35); box-shadow: 0 28px 90px rgba(0,0,0,.62), 0 0 40px rgba(133,96,255,.1); }
+.whats-new-dialog h2 { margin: 7px 0 4px; font-size: 22px; letter-spacing: -.03em; }
+.whats-new-dialog > .sub { margin-bottom: 20px; }
+.whats-new-list { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
+.whats-new-list li { position: relative; padding: 11px 13px 11px 34px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg2); color: var(--text); font-size: 12px; line-height: 1.6; user-select: text; }
+.whats-new-list li::before { content: '✦'; position: absolute; left: 13px; top: 11px; color: var(--accent2); }
+.whats-new-empty { padding: 16px; border-radius: 9px; background: var(--bg2); color: var(--muted); font-size: 12px; }
+.whats-new-actions { justify-content: flex-end; margin-top: 22px; }
 .game-detail { width: min(560px,100%); max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow); }
 .game-detail .hint { overflow-wrap: anywhere; user-select: text; }
-@media (max-width: 700px) { .magic-layout { grid-template-columns: minmax(0,1fr); } .magic-output,.magic-options-panel,.magic-status-view { grid-column: auto; } .magic-section-tabs { overflow-x: auto; } .magic-section-tabs .tab { flex: 0 0 auto; } .magic-option-grid,.magic-status-grid,.magic-source-list { grid-template-columns: minmax(0,1fr); } .magic-controls-header { align-items: flex-start; flex-direction: column; } .magic-layout[data-section="Controls"] .magic-control-panel > .magic-controls { grid-column: auto; } .magic-chatbox .magic-osc-port-row { flex-wrap: wrap; } .magic-chatbox .magic-osc-port-row .field-label { flex: 1 1 190px; } }
+@media (max-width: 700px) { .magic-layout { grid-template-columns: minmax(0,1fr); } .magic-output,.magic-options-panel,.magic-status-view { grid-column: auto; } .magic-section-tabs { overflow-x: auto; } .magic-section-tabs .tab { flex: 0 0 auto; } .magic-option-grid,.magic-status-grid,.magic-source-list { grid-template-columns: minmax(0,1fr); } .magic-controls-header { align-items: flex-start; flex-direction: column; } .magic-layout[data-section="Controls"] .magic-control-panel > .magic-controls { grid-column: auto; } .magic-chatbox .magic-osc-port-row { flex-wrap: wrap; } .magic-chatbox .magic-osc-port-row .field-label { flex: 1 1 190px; } .whats-new-dialog { padding: 22px 18px; } }
 
 .games-root { min-width: 0; }
 .games-heading { display: flex; align-items: center; gap: 13px; }
@@ -1189,7 +1228,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
   .games-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
 .magic-emoji-modal-backdrop,
@@ -1209,3 +1248,359 @@ button:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visi
 .magic-emoji-grid::-webkit-scrollbar-track { background: var(--bg2); }
 .magic-emoji-grid::-webkit-scrollbar-thumb { background: #39344f; border: 2px solid var(--bg2); border-radius: 999px; }
 .magic-emoji-grid::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Experimental audio utility — neon glass menu. */
+.neon-shell {
+  --bg: #080204; --bg2: #14060a; --panel: #16090c; --panel2: #211014;
+  --border: rgba(255,191,47,.3); --text: #ffeccf; --muted: #c39a88;
+  --accent: #ffbf2f; --accent2: #ff3b3b;
+  display: flex; width: min(1320px, 100%); height: 100%; margin: auto;
+  background: radial-gradient(ellipse at 52% 45%, rgba(255,59,59,.1), transparent 62%), #080204;
+  border: 1px solid rgba(255,191,47,.42); box-shadow: 0 0 36px rgba(255,59,59,.13); overflow: hidden;
+}
+body:has(.neon-shell) { background: radial-gradient(ellipse at 20% 80%, #1c0850, transparent 65%), radial-gradient(ellipse at 85% 15%, #06305c, transparent 65%), #020413; }
+.neon-sidebar { width: 190px; flex: 0 0 190px; padding: 24px 12px 14px; display: flex; flex-direction: column; border-right: 1px solid #743afa; background: linear-gradient(160deg, #060a20ee, #06071bef); position: relative; }
+.neon-sidebar::before { content: ''; position: absolute; inset: 0; pointer-events: none; border-top: 2px solid var(--accent); border-bottom: 2px solid #ff3b3b; }
+.neon-sidebar .brand-lockup { display: block; padding: 0 8px 30px; text-align: center; }
+.neon-sidebar .brand-mark { display: none; }
+.neon-sidebar .brand-name { display: block; font-size: 26px; font-style: italic; font-weight: 900; letter-spacing: -1px; color: var(--accent); text-shadow: 0 0 18px #ff3b3b88; }
+.neon-sidebar .brand-name > span { display: block; color: #ff3b3b; font-size: 30px; margin: -3px 0 10px; letter-spacing: -1px; }
+.neon-sidebar .brand-name small { display: block; font-size: 9px; font-style: normal; letter-spacing: 3px; font-weight: 500; color: #8b9ae3; }
+.neon-nav { display: grid; gap: 10px; }
+.neon-nav .nav-item { min-height: 48px; padding: 10px 12px; border: 1px solid transparent; border-radius: 0; font-size: 13px; width: 100%; justify-content: flex-start; }
+.neon-shell .neon-nav .nav-item > span { display: inline-block; }
+.neon-nav .nav-item.active { border-color: #ffbf2f; background: linear-gradient(100deg, #ffbf2f1f, #ff3b3b20); box-shadow: inset 3px 0 #ffbf2f, 0 0 14px #ff3b3b30; color: #fff2d5; }
+.neon-nav .nav-icon { color: #ffbf2f; font-size: 22px; }
+.neon-status { margin-top: auto; padding: 14px 8px; border: 1px solid #343064; background: #060e2380; display: grid; gap: 8px; }
+.neon-status .health-chip { border: 0; background: none; padding: 0; font-size: 10px; border-radius: 0; }
+.neon-status .health-chip span { display: inline; }
+.experimental-label { text-align: center; color: #7584b5; font-size: 8px; letter-spacing: 2px; margin-top: 12px; }
+.neon-workspace { min-height: 0; }
+.neon-titlebar { flex: none; min-height: 62px; padding: 12px 22px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,191,47,.48); background: #0c0408e8; -webkit-app-region: drag; }
+.titlebar-overlay .neon-titlebar { padding-right: 145px; }
+.neon-titlebar h1 { font-size: 19px; font-weight: 600; margin: 0; color: #ffe6a8; }
+.title-icon { font-size: 25px; color: #ffbf2f; filter: drop-shadow(0 0 7px #ff3b3b); }
+.neon-tag { font-size: 8px; color: #c39a88; letter-spacing: 1px; margin-left: auto; }
+.neon-shell .neon-content { padding: 18px 22px; max-width: none; min-height: 0; overflow-x: hidden; }
+.neon-shell .card, .neon-shell .meter { background: linear-gradient(135deg, #1a0b0fdd, #0d0508f2); border: 1px solid rgba(255,191,47,.32); border-radius: 3px; box-shadow: none; animation: none; }
+.neon-shell .card { padding: 14px; margin-bottom: 12px; }
+.neon-shell .card h2, .neon-shell .section-heading h2 { font-size: 14px; color: #9d76ff; font-weight: 600; margin: 0 0 12px; }
+.neon-shell .section-heading { margin: 0 0 10px; }
+.neon-shell .section-heading h2 { margin: 0; }
+.neon-shell .meters { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-bottom: 14px; }
+.neon-shell .meter { padding: 10px; min-width: 0; }
+.neon-shell .meter .label { font-size: 10px; gap: 5px; }
+.neon-shell .bar { height: 5px; }
+.neon-shell .bar .fill { background: linear-gradient(90deg,#16c9ff,#8154ff); }
+.neon-shell button { border-radius: 3px; padding: 8px 10px; font-size: 11px; background: #0d1735; border-color: #43408c; box-shadow: none; }
+.neon-shell button.primary { background: linear-gradient(100deg,#a41520,#a45a10); color: #fff2d5; border-color: #ffbf2f; }
+.neon-shell button:hover:not(:disabled) { border-color: #ffbf2f; background: #382013; }
+.neon-shell .tabs { margin: 12px 0 8px; gap: 8px; }
+.neon-shell .tab { flex: 1; padding: 8px; font-size: 11px; }
+.neon-shell .tab.active { background: linear-gradient(100deg,#16416d,#392268); border-color: #7252d7; }
+.neon-shell .toggle { padding: 11px 12px; margin-bottom: 8px; border-radius: 3px; background: #080f28; border-color: #393374; }
+.neon-shell .toggle .t-label { font-size: 12px; }
+.neon-shell .toggle .t-sub { font-size: 10px; color: #7e8dbb; }
+.neon-shell select { min-width: 0; max-width: 100%; font-size: 11px; border-radius: 3px; }
+.neon-shell .hint, .neon-shell .sub { font-size: 10px; line-height: 1.5; margin: 6px 0 10px; }
+.neon-shell .row { gap: 8px; }
+.neon-shell .row > button { min-height: 30px; }
+.neon-shell .dashboard-root { display: flex; flex-direction: column; }
+.neon-shell .dashboard-section-heading { order: 0; }
+.neon-shell .guided-setup { max-width: 640px; margin: auto; }
+.setup-progress { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); padding: 0; margin: 0 0 20px; list-style: none; gap: 8px; }
+.setup-progress li { display: flex; align-items: center; gap: 6px; color: #a68479; font-size: 11px; padding-bottom: 10px; border-bottom: 2px solid #3b2020; }
+.setup-progress li span { display: grid; place-items: center; width: 22px; height: 22px; flex: none; background: #261014; border-radius: 50%; }
+.setup-progress li.current { color: #ffe6a8; border-color: #ff3b3b; }
+.setup-progress li.completed { color: #ffbf2f; border-color: #a45a10; }
+.neon-shell .guided-setup .setup-card { padding: 22px; min-height: 220px; }
+.neon-shell .guided-setup .setup-step-label { font-size: 9px; letter-spacing: 2px; color: #8294cf; margin: 0 0 14px; }
+.neon-shell .guided-setup h2 { font-size: 18px; margin-bottom: 10px; }
+.neon-shell .guided-setup .sub { font-size: 12px; margin-bottom: 18px; }
+.setup-status { color: #ffcf5a; padding: 12px; background: #44200f30; border: 1px solid #8a4b26; font-size: 12px; }
+.setup-device-name { padding: 14px; background: #211014; border: 1px solid #80502a; color: #ffe6a8; font-size: 13px; overflow-wrap: anywhere; }
+.setup-navigation { display: flex; justify-content: space-between; gap: 12px; }
+.neon-shell .setup-navigation button { padding: 10px 20px; font-size: 12px; }
+@media (max-width: 620px) { .setup-progress li { flex-direction: column; font-size: 9px; gap: 5px; } .neon-shell .guided-setup .setup-card { padding: 14px; } }
+.neon-shell .dashboard-summary { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid #383574; background: #090f2780; margin-bottom: 16px; }
+.neon-shell .dashboard-summary b { display: block; font-size: 13px; font-weight: 500; }
+.neon-shell .dashboard-summary small { display: block; color: var(--muted); font-size: 10px; margin-top: 5px; }
+.dashboard-led { width: 9px; height: 9px; background: #ffbc64; border-radius: 50%; }
+.dashboard-led.is-ready { background: #21cfb2; box-shadow: 0 0 14px #21cfb277; }
+.neon-shell .dashboard-tiles { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.neon-shell .dashboard-tiles button { display: flex; align-items: center; gap: 14px; text-align: left; min-height: 90px; padding: 18px; background: linear-gradient(135deg,#0b1734,#080c20); border: 1px solid #5642a2; border-radius: 3px; }
+.neon-shell .dashboard-tiles button:hover { box-shadow: inset 0 0 22px #7135ff24, 0 0 12px #363dff24; }
+.neon-shell .dashboard-tiles button > span:not(.tile-icon) { font-size: 13px; }
+.neon-shell .dashboard-tiles small { display: block; color: #8594c2; font-size: 10px; margin-top: 6px; }
+.neon-shell .dashboard-tiles .tile-icon { font-size: 28px; color: #9975ff; width: 28px; text-align: center; }
+.neon-shell .dashboard-tiles i { margin-left: auto; font-size: 25px; color: #51b6ff; font-style: normal; }
+.neon-shell .source-panel, .neon-shell .device-panel { min-width: 0; }
+@media (max-width: 620px) { .neon-shell .dashboard-tiles { grid-template-columns: 1fr; gap: 8px; } .neon-shell .dashboard-tiles button { min-height: 70px; padding: 12px; } }
+.neon-shell .dashboard-root > .meters { order: 1; }
+.neon-shell .quick-controls { order: 2; }
+.neon-shell .dashboard-root > .tabs { order: 3; }
+.neon-shell .service-card { order: 4; }
+.neon-shell .routing-details { order: 5; }
+.neon-shell .quick-controls input[type='range'] { min-width: 70px; accent-color: #815aff; }
+.neon-shell .switch input:focus-visible + .slider { outline: 2px solid #39cfff; outline-offset: 3px; }
+.neon-shell .routing-details, .neon-shell .connection-details { border: 1px solid #323064; background: #070e2380; padding: 10px 12px; margin: 8px 0 12px; font-size: 11px; }
+.neon-shell summary { cursor: pointer; color: #9dabec; -webkit-app-region: no-drag; }
+.neon-shell summary > span { float: right; color: #32ccb4; font-size: 10px; }
+.neon-shell .routing-details > .card { margin: 12px 0 0; }
+.neon-shell .inline-notice { color: #b6c4e9; background: #121834; border-color: #46406d; overflow-wrap: anywhere; }
+.neon-shell .mixer-config-actions { flex-direction: row; flex-wrap: wrap; }
+.neon-shell .mixer-config-actions select { flex-basis: 100%; }
+.neon-shell .mixer-config-actions button { width: auto; }
+.neon-shell .page-hero { display: none; }
+.neon-shell .setup-card { padding: 14px; }
+.neon-shell .card-step-number, .neon-shell .setup-count, .neon-shell .section-kicker { display: none; }
+.neon-shell .finish-card { padding: 14px; gap: 10px; }
+.neon-shell .finish-button { min-width: 0; }
+.neon-shell .view-transition { animation-duration: .15s; }
+@media (max-width: 620px) {
+  .neon-sidebar { width: 132px; flex-basis: 132px; padding: 20px 8px 10px; }
+  .neon-sidebar .brand-name { font-size: 19px; }
+  .neon-sidebar .brand-name > span { font-size: 23px; }
+  .neon-sidebar .brand-name small { font-size: 7px; letter-spacing: 2px; }
+  .neon-nav .nav-item { font-size: 11px; gap: 6px; padding: 8px; }
+  .neon-titlebar { padding: 12px; }
+  .neon-titlebar h1 { font-size: 16px; }
+  .neon-titlebar .neon-tag { display: none; }
+  .neon-shell .neon-content { padding: 12px; }
+  .neon-shell .meters { grid-template-columns: 1fr; gap: 5px; }
+  .neon-shell .meter { padding: 7px 10px; }
+}
+
+/* Red + gold live mixing cockpit based on the Sound Bridge mark concept. */
+.neon-shell .neon-content { background-image: radial-gradient(ellipse at 50% 48%, rgba(255,59,59,.075), transparent 62%); }
+.neon-shell .health-chip.is-ok i { background: #ffbf2f; box-shadow: 0 0 8px rgba(255,191,47,.64); }
+.neon-shell .health-chip.is-off i { background: #ff3b3b; }
+.neon-shell .dashboard-root:has(.cockpit) { height: 100%; min-height: 0; }
+.neon-shell .dashboard-root:has(.cockpit) > .dashboard-section-heading { display: none; }
+.neon-shell .cockpit { display: flex; flex: 1; flex-direction: column; min-height: 0; gap: 15px; }
+.cockpit-status { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 0 11px; color: #c39a88; font: 11px 'Share Tech Mono', Consolas, monospace; letter-spacing: .04em; }
+.cockpit-status b { color: #ffeccf; font: 600 12px 'Segoe UI', sans-serif; }
+.cockpit-status-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ff9d2f; box-shadow: 0 0 9px #ff9d2f; }
+.cockpit-status-dot.is-ready { background: #ffbf2f; box-shadow: 0 0 10px #ffbf2f; }
+.cockpit-status-separator { color: #6e403b; }
+.cockpit-status-link, .cockpit-text-button { margin-left: auto; padding: 4px 8px !important; border: 0 !important; background: transparent !important; color: #ffbf2f !important; font-size: 10px !important; }
+.cockpit-status-link i { font-style: normal; }
+.cockpit-instruments { display: grid; flex: 1; min-height: 270px; grid-template-columns: minmax(108px,.65fr) minmax(220px,1.45fr) minmax(108px,.65fr); align-items: center; gap: clamp(5px,2vw,24px); padding: 12px 5px; }
+.cockpit-volume { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.cockpit-kicker { color: #c39a88; font: 9px 'Share Tech Mono', Consolas, monospace; letter-spacing: .14em; }
+.cockpit-volume-dial, .cockpit-gauge { position: relative; display: grid; place-items: center; width: 100%; max-width: 155px; aspect-ratio: 1; border-radius: 50%; background: conic-gradient(from 135deg, var(--dial-color) 0deg var(--sweep), rgba(255,191,47,.13) var(--sweep) 270deg, transparent 270deg 360deg); filter: drop-shadow(0 0 11px color-mix(in srgb,var(--dial-color),transparent 65%)); }
+.cockpit-volume-dial { --dial-color: #ffbf2f; }
+.cockpit-gauge { --dial-color: #ffbf2f; }
+.cockpit-gauge-small:nth-child(2) { --dial-color: #ff3b3b; }
+.cockpit-volume-dial::before, .cockpit-gauge::before { position: absolute; inset: 6px; border: 1px dashed rgba(255,191,47,.3); border-radius: 50%; content: ''; }
+.cockpit-volume-face, .cockpit-gauge-face { display: grid; place-content: center; justify-items: center; width: calc(100% - 18px); height: calc(100% - 18px); border: 1px solid rgba(255,191,47,.23); border-radius: 50%; background: radial-gradient(circle,#17090d 0,#090307 74%); text-align: center; }
+.cockpit-volume-face > span { color: #ffbf2f; font-size: 24px; line-height: 1.1; }
+.cockpit-volume-face strong, .cockpit-gauge-face strong { color: #fff2d5; font: 700 clamp(18px,2.1vw,27px) 'Rajdhani','Segoe UI',sans-serif; text-shadow: 0 0 12px rgba(255,191,47,.4); }
+.cockpit-volume-face strong small { color: #c39a88; font: 10px 'Share Tech Mono',Consolas,monospace; }
+.cockpit-volume > input[type='range'] { width: 90%; margin-top: 2px; accent-color: #ffbf2f; }
+.cockpit-center-meter { display: grid; place-items: center; min-width: 0; }
+.cockpit-gauge-core { width: min(100%, min(40vh, 365px)); --dial-color: #ff3b3b; filter: drop-shadow(0 0 17px rgba(255,59,59,.25)); }
+.cockpit-gauge-core::before { inset: 7px; border-style: solid; border-color: rgba(255,59,59,.36); }
+.cockpit-gauge-core .cockpit-gauge-face { width: calc(100% - 24px); height: calc(100% - 24px); box-shadow: inset 0 0 50px rgba(255,59,59,.08); }
+.cockpit-gauge-core .cockpit-gauge-face strong { font-size: clamp(28px,4vw,48px); text-shadow: 0 0 19px rgba(255,59,59,.65); }
+.cockpit-gauge-face span { margin-top: 3px; color: var(--dial-color); font: 700 9px 'Share Tech Mono',Consolas,monospace; letter-spacing: .15em; }
+.cockpit-side-meters { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+.cockpit-gauge-small { width: min(100%, min(19vh, 160px)); }
+.cockpit-gauge-small .cockpit-gauge-face strong { font-size: clamp(17px,2vw,24px); }
+.cockpit-lower { display: grid; grid-template-columns: minmax(150px,.8fr) minmax(230px,1.2fr); gap: 12px; padding-top: 12px; border-top: 1px solid rgba(255,191,47,.19); }
+.cockpit-toggle-cluster { display: grid; align-content: start; gap: 7px; }
+.neon-shell .cockpit-toggle-cluster .toggle { margin: 0; padding: 9px 10px; border-color: rgba(255,191,47,.18); background: rgba(40,13,14,.58); }
+.neon-shell .cockpit-toggle-cluster .toggle .t-label { color: #ffeccf; font-weight: 700; }
+.neon-shell .cockpit-toggle-cluster .toggle .t-sub { color: #b58a7b; }
+.neon-shell .cockpit-toggle-cluster .switch input:checked + .slider { background: #9d301a; border-color: #ffbf2f; }
+.neon-shell .cockpit-source { min-width: 0; padding: 10px 12px; border: 1px solid rgba(255,191,47,.29); background: linear-gradient(145deg,rgba(48,14,17,.65),rgba(13,5,8,.85)); }
+.cockpit-source-head { display: flex; align-items: center; justify-content: space-between; }
+.cockpit-source-head .cockpit-text-button { margin-right: -7px; }
+.cockpit-source-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 8px 0; border: 1px solid rgba(255,191,47,.25); }
+.neon-shell .cockpit-source-tabs button { min-width: 0; padding: 6px 4px; border: 0; background: transparent; color: #c39a88; font-size: 10px; }
+.neon-shell .cockpit-source-tabs button[aria-pressed='true'] { color: #180609; background: linear-gradient(90deg,#ffbf2f,#ff9d2f); }
+.cockpit-source-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.neon-shell .cockpit-source-actions button { flex: 1; min-width: 55px; padding: 7px 8px; font-size: 9px; }
+.neon-shell .cockpit-source-actions .cockpit-verify { flex: 0 0 auto; }
+.cockpit-browser-label { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 7px; margin: 5px 0 8px; color: #c39a88; font-size: 10px; }
+.neon-shell .cockpit-browser-label select { width: 100%; }
+.cockpit-route-message { margin: 7px 0 0; color: #c39a88; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.cockpit-route-message.is-ok { color: #ffcf5a; }
+.cockpit-route-message.is-error { color: #ff8070; }
+@media (max-width: 820px) {
+  .neon-shell { width: 100%; }
+  .cockpit-instruments { grid-template-columns: minmax(90px,.55fr) minmax(180px,1.2fr) minmax(85px,.55fr); gap: 5px; }
+  .cockpit-gauge-core { width: min(100%, 32vh); }
+  .cockpit-side-meters { gap: 9px; }
+  .cockpit-gauge-small { width: min(100%, 15vh); }
+  .cockpit-lower { grid-template-columns: minmax(120px,.75fr) minmax(195px,1.25fr); }
+}
+@media (max-width: 620px) {
+  .neon-shell .cockpit { gap: 8px; }
+  .cockpit-status { flex-wrap: wrap; gap: 6px; font-size: 9px; }
+  .cockpit-instruments { min-height: 270px; grid-template-columns: 68px minmax(130px,1fr) 68px; gap: 4px; padding: 4px 0; }
+  .cockpit-kicker { font-size: 7px; letter-spacing: .07em; text-align: center; }
+  .cockpit-volume-dial { width: 65px; }
+  .cockpit-volume-face > span { font-size: 17px; }
+  .cockpit-volume-face strong { font-size: 15px; }
+  .cockpit-volume > input[type='range'] { width: 70px; }
+  .cockpit-gauge-core { width: min(100%, 26vh); }
+  .cockpit-gauge-small { width: 65px; }
+  .cockpit-gauge-small .cockpit-gauge-face strong { font-size: 15px; }
+  .cockpit-gauge-face span { font-size: 7px; letter-spacing: .07em; }
+  .cockpit-lower { grid-template-columns: 1fr; gap: 8px; }
+  .cockpit-toggle-cluster { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .neon-shell .cockpit-toggle-cluster .toggle { padding: 7px; gap: 4px; }
+}
+
+/* Mark HUD: top navigation, warm surfaces, and responsive instruments. */
+body:has(.mark-shell) { background: #080204; }
+.mark-shell { flex-direction: column; max-width: none; border: 0; }
+.mark-shell .neon-sidebar { width: 100%; flex: none; min-height: 72px; flex-direction: row; align-items: center; gap: 24px; padding: 12px 24px; border-right: 0; border-bottom: 1px solid var(--border); background: #100509; overflow: visible; }
+.mark-shell .neon-sidebar::before { display: none; }
+.mark-shell .brand-lockup { display: flex; align-items: center; gap: 12px; padding: 0; text-align: left; }
+.mark-shell .brand-mark { display: grid; flex: none; width: 40px; height: 40px; color: var(--accent); background: transparent; box-shadow: none; animation: none; }
+.mark-shell .brand-mark svg { width: 40px; height: 40px; }
+/* The secret Settings button must never paint button chrome: no tint, no hover box, no border, no ring. */
+.mark-shell .brand-mark,
+.mark-shell .brand-mark:hover:not(:disabled),
+.mark-shell .brand-mark:focus,
+.mark-shell .brand-mark:focus-visible,
+.mark-shell .brand-mark:active {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: none;
+}
+.mark-shell .brand-name { color: #ffeccf; font-size: 17px; letter-spacing: .12em; font-style: normal; text-shadow: none; white-space: nowrap; }
+.mark-shell .brand-name > span { display: block; margin: 4px 0 0; color: #ffbf2f; font-size: 9px; letter-spacing: .18em; }
+.mark-shell .brand-name small { display: none; }
+.mark-shell .neon-nav { display: flex; gap: 8px; margin: auto; }
+.mark-shell .neon-nav .nav-item { width: auto; min-height: 38px; padding: 8px 22px; letter-spacing: .13em; text-transform: uppercase; border: 1px solid var(--border); color: var(--muted); }
+.mark-shell .neon-nav .nav-item.active { color: #180609; background: linear-gradient(110deg,#ffbf2f,#ff9d2f); box-shadow: 0 0 16px #ffbf2f20; }
+.mark-shell .neon-nav .nav-icon { display: none; }
+.mark-shell .neon-status { margin: 0; padding: 0; display: flex; gap: 16px; border: 0; background: transparent; }
+.mark-shell .neon-status .health-chip { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.mark-shell .neon-titlebar { min-height: 36px; padding: 8px 26px; background: transparent; border: 0; }
+.mark-shell .neon-titlebar h1 { font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--muted); }
+.mark-shell .title-icon { display: none; }
+.mark-shell .neon-titlebar .neon-tag { display: block; font-size: 9px; }
+@media (max-width: 430px) { .mark-shell .neon-titlebar { flex-wrap: wrap; } .mark-shell .neon-tag { margin-left: 0; width: 100%; } }
+.titlebar-overlay .mark-shell .neon-sidebar { padding-right: 150px; -webkit-app-region: drag; }
+.mark-shell .neon-nav, .mark-shell button, .mark-shell input, .mark-shell select { -webkit-app-region: no-drag; }
+.mark-shell .neon-content { padding: 10px 28px 24px; background: radial-gradient(ellipse at 50% 48%,#ff3b3b12,transparent 65%), repeating-linear-gradient(0deg,transparent 0 3px,#ffbf2f03 3px 4px); }
+.mark-shell .view-transition { min-height: 100%; animation: none; }
+.mark-shell button { color: var(--text); background: var(--panel2); border-color: var(--border); font-size: 12px; }
+.mark-shell select, .mark-shell .field-label select { background: var(--bg2); border-color: var(--border); color: var(--text); font-size: 12px; }
+.mark-shell .card h2, .mark-shell .section-heading h2, .mark-shell summary { color: #ffe6a8; }
+.mark-shell .tab.active { color: #180609; background: #ffbf2f; border-color: #ffbf2f; }
+.mark-shell .toggle, .mark-shell .step, .mark-shell .connection-details { background: #19090e; border-color: var(--border); }
+.mark-shell .toggle .t-sub, .mark-shell .mixer-config-copy > span:last-child { color: var(--muted); }
+.mark-shell .inline-notice { background: #201010; border-color: var(--border); color: #ffe6a8; font-size: 12px; }
+.mark-shell .bar .fill { background: linear-gradient(90deg,#ffbf2f,#ff3b3b); }
+.mark-shell .hint { font-size: 12px; }
+.mark-shell .guided-setup .setup-step-label { color: var(--muted); }
+.mark-shell .cockpit { width: 100%; max-width: 1100px; margin: 0 auto; gap: 24px; flex: none; }
+.mark-shell .view-transition:has(.cockpit) { height: auto; }
+.mark-shell .dashboard-root:has(.cockpit) { height: auto; }
+.mark-shell .cockpit-volume > input[type='range'] { width: min(100%, 155px); min-width: 0; flex: none; }
+.mark-shell .cockpit-gauge-face strong { white-space: nowrap; }
+.mark-shell .cockpit-gauge-face span { white-space: nowrap; }
+.mark-shell .neon-nav .nav-item > .nav-icon { display: none; }
+.mark-shell .cockpit-status { padding: 0; }
+.mark-shell .cockpit-instruments { flex: none; min-height: 0; grid-template-columns: minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr); gap: 36px; padding: 32px 20px; }
+.mark-shell .cockpit-volume, .mark-shell .cockpit-center-meter, .mark-shell .cockpit-side-meters { min-width: 0; }
+.mark-shell .cockpit-gauge-small { width: 140px; max-width: 100%; }
+.mark-shell .cockpit-gauge-small .cockpit-gauge-face strong { font-size: 23px; }
+.mark-shell .cockpit-side-meters { gap: 30px; }
+.mark-shell .cockpit-volume-dial { width: 155px; max-width: 100%; }
+.mark-shell .cockpit-gauge-core { width: min(100%, 330px); }
+.mark-shell .cockpit-gauge-core { max-width: 365px; }
+.hud-rings { position: absolute; inset: -9%; width: 118%; height: 118%; pointer-events: none; fill: none; stroke: var(--dial-color); stroke-opacity: .35; }
+.hud-orbit { fill: none; stroke: #ffbf2f; stroke-width: 1; stroke-dasharray: 2 5; transform-origin: center; animation: hud-spin 60s linear infinite; }
+.hud-inner-orbit { stroke-dasharray: 22 7 8 7; transform-origin: center; animation: hud-spin 35s linear infinite reverse; }
+.hud-triangle { stroke-opacity: .18; }
+@keyframes hud-spin { to { transform: rotate(360deg); } }
+.mark-shell .cockpit-gauge-core .cockpit-gauge-face strong { font-size: clamp(32px,4vw,52px); }
+.mark-shell .cockpit-gauge-face span { font-size: 10px; }
+.mark-shell .cockpit-source-actions button { min-height: 36px; font-size: 11px; }
+.mark-shell .cockpit-source-tabs button { padding: 8px; font-size: 12px; }
+.mark-shell .cockpit-lower { grid-template-columns: minmax(220px,.8fr) minmax(320px,1.2fr); }
+.mark-shell .cockpit-toggle-cluster .toggle { min-height: 55px; }
+.mark-shell .cockpit-route-message { font-size: 11px; }
+.mark-shell .hud-device-drawer { position: relative; width: 100%; max-width: 700px; margin: 0 auto; padding: 24px; background: #14070c; border: 1px solid var(--border); border-left: 2px solid #ffbf2f; }
+.mark-shell .dashboard-root:has(.hud-device-drawer) > .dashboard-section-heading { display: flex; }
+.mark-shell .hud-device-drawer select { width: 100%; min-width: 0; }
+.mark-shell .dashboard-section-heading { gap: 16px; flex-wrap: wrap; }
+.mark-shell .neon-titlebar { flex-shrink: 0; }
+.mark-shell .neon-content { min-width: 0; overflow-x: hidden; }
+.mark-shell .neon-sidebar { flex-wrap: wrap; }
+.hud-drawer-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.hud-drawer-heading h2 { margin: 0; text-transform: uppercase; letter-spacing: .15em; font-size: 18px; }
+.hud-drawer-heading button { width: 34px; height: 34px; padding: 0; font-size: 22px; }
+.mark-shell .hud-device-drawer .mixer-config-card { background: transparent; padding: 0; border: 0; }
+.mark-shell .hud-device-drawer .mixer-config-copy { font-size: 12px; line-height: 1.5; }
+.mark-shell .hud-device-drawer .route-diagnostic { color: var(--muted); }
+.mark-shell .hud-device-drawer .inline-notice { line-height: 1.7; }
+.mark-shell .hud-device-drawer summary { font-size: 12px; }
+.mark-shell .guided-setup { display: grid; max-width: 1000px; grid-template-columns: minmax(240px,.85fr) minmax(320px,1.15fr); gap: 16px 32px; padding-top: 24px; align-items: center; }
+.mark-shell .guided-setup .setup-progress { grid-column: 1 / -1; }
+.setup-mission-ring { position: relative; width: 100%; max-width: 340px; aspect-ratio: 1; margin: auto; }
+.setup-mission-ring svg { width: 100%; height: 100%; fill: none; }
+.mission-segment { stroke: #ffbf2f20; stroke-width: 7px; }
+.mission-segment.active { stroke: #ff3b3b; filter: drop-shadow(0 0 4px #ff3b3b); }
+.mission-segment.done { stroke: #ffbf2f; }
+.setup-mission-ring > div { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; }
+.setup-mission-ring strong { font-size: 80px; line-height: 1; text-shadow: 0 0 20px #ff3b3b60; }
+.setup-mission-ring span { color: #ffbf2f; font-size: 15px; letter-spacing: .2em; text-transform: uppercase; }
+.mark-shell .guided-setup .setup-card { margin: 0; min-width: 0; }
+.mark-shell .setup-navigation { grid-column: 2; }
+@media (max-width: 760px) {
+  .mark-shell .neon-sidebar { flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
+  .mark-shell .neon-nav { margin: 0 0 0 auto; }
+  .mark-shell .neon-status { width: 100%; justify-content: center; }
+  .mark-shell .neon-titlebar { padding: 8px 16px; }
+  .mark-shell .neon-content { padding: 8px 16px 24px; }
+  .mark-shell .cockpit-instruments { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 28px 24px; padding: 20px 16px; }
+  .mark-shell .cockpit-center-meter { grid-column: 1 / -1; grid-row: 1; }
+  .mark-shell .cockpit-gauge-core { width: min(65vw, 260px); }
+  .mark-shell .cockpit-volume-dial { width: 125px; }
+  .mark-shell .cockpit-side-meters { flex-direction: row; justify-content: center; flex-wrap: wrap; gap: 22px; }
+  .mark-shell .cockpit-gauge-small { width: 110px; }
+  .mark-shell .cockpit-gauge-small .cockpit-gauge-face strong { font-size: 19px; }
+  .mark-shell .cockpit-gauge-core .cockpit-gauge-face strong { font-size: 36px; }
+  .mark-shell .cockpit-lower { grid-template-columns: 1fr; }
+  .mark-shell .cockpit-toggle-cluster { grid-template-columns: 1fr 1fr; }
+  .mark-shell .guided-setup { grid-template-columns: 1fr; padding-top: 10px; gap: 14px; }
+  .setup-mission-ring { max-width: 170px; }
+  .setup-mission-ring strong { font-size: 46px; }
+  .mark-shell .setup-navigation { grid-column: 1; }
+}
+@media (max-width: 430px) {
+  .mark-shell .brand-name { font-size: 17px; }
+  .mark-shell .brand-name > span { font-size: 8px; }
+  .mark-shell .brand-mark, .mark-shell .brand-mark svg { width: 30px; height: 30px; }
+  .mark-shell .neon-nav .nav-item { padding: 8px 12px; font-size: 11px; }
+  .mark-shell .cockpit-instruments { grid-template-columns: 1fr 1fr; gap: 24px 12px; }
+  .mark-shell .cockpit-center-meter { grid-column: 1 / -1; grid-row: 1; }
+  .mark-shell .cockpit-gauge-core { width: 210px; }
+  .mark-shell .cockpit-side-meters { flex-direction: row; flex-wrap: wrap; }
+  .mark-shell .cockpit-gauge-small { width: 100px; }
+  .mark-shell .cockpit-gauge-small .cockpit-gauge-face strong { font-size: 18px; }
+  .mark-shell .cockpit-toggle-cluster { grid-template-columns: 1fr; }
+  .mark-shell .cockpit-volume-dial { width: 100px; }
+  .mark-shell .cockpit-gauge-core .cockpit-gauge-face strong { font-size: 32px; }
+}
+@media (min-width: 761px) and (max-height: 700px) {
+  .mark-shell .cockpit { gap: 14px; }
+  .mark-shell .cockpit-instruments { padding: 16px 20px; gap: 28px; }
+  .mark-shell .cockpit-gauge-core { width: min(100%, 240px); }
+  .mark-shell .cockpit-gauge-small { width: 100px; }
+  .mark-shell .cockpit-gauge-small .cockpit-gauge-face strong { font-size: 18px; }
+  .mark-shell .cockpit-side-meters { gap: 24px; }
+  .mark-shell .cockpit-volume-dial { width: 125px; }
+  .mark-shell .cockpit-gauge-core .cockpit-gauge-face strong { font-size: 34px; }
+  .mark-shell .cockpit-lower { padding-top: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .hud-rings *, .setup-mission-ring * { animation: none !important; } }

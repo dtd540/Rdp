@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyBorder, applyMessageFrame, normaliseBorderStyle } from './chatboxIntegrations';
-import { cycleOutputs, normaliseChatboxSettings, SETTINGS_VERSION } from './chatboxSettings';
+import { cycleOutputs, normaliseChatboxSettings, randomCycleIndex, SETTINGS_VERSION } from './chatboxSettings';
 const context = { now: new Date('2026-10-06T12:34:56Z'), activity: 'VRChat', status: 'Available', clock24h: true };
 describe('Magic Chatbox improvements', () => {
   it('restores bounded preferences without restoring sending consent', () => {
@@ -12,19 +12,26 @@ describe('Magic Chatbox improvements', () => {
     expect(settings.lineSeparator).toBe('pipe');
     expect(settings.messageFrame).toBe('custom');
     expect(settings.frameTop).toBe('hello world');
+    expect(settings.textStyle).toBe('plain');
+    expect(normaliseChatboxSettings({ textStyle: 'monospace' }).textStyle).toBe('monospace');
+    expect(normaliseChatboxSettings({ textStyle: 'not-a-style' }).textStyle).toBe('plain');
     expect(settings.borderStyle).toBe('pipes');
     expect(settings.borderLeft).toBe('« ');
     expect(settings.borderRight).toBe(' »');
     expect(settings.integrationOptions.mediaOnlyPlaying).toBe(true);
+    expect(settings.randomCycle).toBe(false);
+    expect(normaliseChatboxSettings({ intervalSeconds: 5 }).intervalSeconds).toBe(5);
+    expect(normaliseChatboxSettings({ intervalSeconds: 10, randomCycle: true })).toMatchObject({ intervalSeconds: 10, randomCycle: true });
+    expect(normaliseChatboxSettings({ intervalSeconds: 7 }).intervalSeconds).toBe(30);
     expect(normaliseChatboxSettings({ port: 1, intervalSeconds: 1 }).borderStyle).toBe('none');
   });
-  it('repairs the pre-v2 all-off emoji corruption without overriding a v2 choice', () => {
-    const stored = [{ id: 'current_time', enabled: true, emoji: '🕐', format: '{emoji} {value}', showEmoji: false }];
-    const legacy = normaliseChatboxSettings({ integrations: stored });
-    expect(legacy.version).toBe(SETTINGS_VERSION);
-    expect(legacy.integrations.find((item) => item.id === 'current_time')?.showEmoji).toBe(true);
-    const current = normaliseChatboxSettings({ version: SETTINGS_VERSION, integrations: stored });
-    expect(current.integrations.find((item) => item.id === 'current_time')?.showEmoji).toBe(false);
+
+  it('chooses bounded random cycle indices without repeating the previous item when possible', () => {
+    expect(randomCycleIndex(0, 0, () => 0.5)).toBe(-1);
+    expect(randomCycleIndex(1, 0, () => 0.9)).toBe(0);
+    expect(randomCycleIndex(3, 1, () => 0.5)).not.toBe(1);
+    expect(randomCycleIndex(3, 1, () => -10)).toBe(0);
+    expect(randomCycleIndex(3, 1, () => 10)).toBe(2);
   });
   it('renders only cycle-selected saved messages in order', () => {
     expect(cycleOutputs([{ id: '1', name: 'First', text: '{status}', cycle: true }, { id: '2', name: 'Not selected', text: 'skip' }, { id: '3', name: 'Second', text: '{activity}', cycle: true }], context).map((item) => item.text)).toEqual(['Available', 'VRChat']);

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AppState, BridgeOpResult } from '@shared/rpc';
-import type { UpdateStatus } from '@shared/update';
+import type { UpdateNotice, UpdateStatus } from '@shared/update';
 
 export interface Unsub {
   (): void;
@@ -21,8 +21,16 @@ const bridge = {
   op: (op: string, arg?: string): Promise<BridgeOpResult> =>
     ipcRenderer.invoke('bridge:op', op, arg),
 
+  /** Wallpaper Engine library. */
+  listWallpapers: (): Promise<BridgeOpResult> => ipcRenderer.invoke('bridge:op', 'listWallpapers'),
+  refreshWallpapers: (): Promise<BridgeOpResult> => ipcRenderer.invoke('bridge:op', 'refreshWallpapers'),
+  refreshBackground: (): Promise<BridgeOpResult> => ipcRenderer.invoke('bridge:op', 'refreshBackground'),
+  applyWallpaper: (targetPath: string): Promise<BridgeOpResult> => ipcRenderer.invoke('bridge:op', 'applyWallpaper', targetPath),
+
   updates: {
     getStatus: (): Promise<UpdateStatus | null> => ipcRenderer.invoke('updates:getStatus'),
+    getPendingNotice: (): Promise<UpdateNotice | null> => ipcRenderer.invoke('updates:getPendingNotice'),
+    dismissNotice: (): Promise<void> => ipcRenderer.invoke('updates:dismissNotice'),
     check: (): Promise<UpdateStatus> => ipcRenderer.invoke('updates:check'),
     install: (): Promise<boolean> => ipcRenderer.invoke('updates:install')
   },

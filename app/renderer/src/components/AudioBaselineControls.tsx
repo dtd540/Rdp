@@ -56,7 +56,7 @@ export const AudioBaselineControls: FC<Props> = ({ state, setState }) => {
         Restore saved settings
       </button>}
     </div>
-    <p className="hint">Save before applying routing or connecting Spotify to capture the pre-route state. Restore resets Spotify’s per-app output, VoiceMeeter’s saved routing/mix values, gain, and ducking.</p>
+    <p className="hint">Save before routing. Restore returns Spotify and VoiceMeeter to your saved mix.</p>
     {detail && <p className="hint" role="status">{detail}</p>}
     {state.audioBaseline && <p className="hint">Saved {new Date(state.audioBaseline.capturedAt).toLocaleString()}.</p>}
   </div>;

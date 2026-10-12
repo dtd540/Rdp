@@ -91,13 +91,16 @@ describe('loadBackground', () => {
 });
 
 describe('loadStoredBackground', () => {
-  it('returns null when no background is persisted', () => {
-    expect(loadStoredBackground(null)).toBeNull();
-    expect(loadStoredBackground('')).toBeNull();
+  it('returns null when no background is persisted', async () => {
+    await expect(loadStoredBackground(null)).resolves.toBeNull();
+    await expect(loadStoredBackground('')).resolves.toBeNull();
   });
 
-  it('re-checks the stored path so a moved file is reported, not silently blank', () => {
-    const rejected = expectRejected(loadStoredBackground(path.join(dir, 'was-here.gif')) as BackgroundResult);
-    expect(rejected.image.broken).toBe(true);
+  it('re-checks the stored path so a moved file is reported, not silently blank', async () => {
+    const result = await loadStoredBackground(path.join(dir, 'was-here.gif'));
+    expect(result).not.toBeNull();
+    if (!result) return;
+    expect(result.ok).toBe(false);
+    expect(result.image.broken).toBe(true);
   });
 });

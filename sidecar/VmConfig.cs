@@ -65,7 +65,7 @@ public sealed class VmConfig
             return r;
         }
 
-        var currentA1 = _api.TryGetString("Bus[0].device.name", out var selectedA1) ? selectedA1 : "";
+        var currentA1 = _api.WaitForString("Bus[0].device.name", 1500) ?? "";
         VoiceMeeterApi.VmOutputDevice? a1Device = null;
         if (!OutputDeviceMatches(currentA1, a1Target.Name))
         {
@@ -154,7 +154,7 @@ public sealed class VmConfig
 
     private bool ApplyA1Output(string endpointName, VoiceMeeterApi.VmOutputDevice? match, out string detail)
     {
-        var current = _api.TryGetString("Bus[0].device.name", out var selectedName) ? selectedName : "";
+        var current = _api.WaitForString("Bus[0].device.name", 1500) ?? "";
         if (OutputDeviceMatches(endpointName, current))
         {
             detail = $"A1 monitoring output: {current}";
@@ -176,14 +176,18 @@ public sealed class VmConfig
             return false;
         }
 
-        Thread.Sleep(400);
-        if (_api.TryGetString("Bus[0].device.name", out var verified) && OutputDeviceMatches(verified, match.Name))
+        // Selecting a device makes VoiceMeeter rebuild the audio engine; poll
+        // until it reports the new output instead of giving up after one read.
+        var verified = _api.WaitForString("Bus[0].device.name", 4000);
+        if (verified is not null && OutputDeviceMatches(verified, match.Name))
         {
             detail = $"A1 monitoring output set to {verified}";
             return true;
         }
 
-        detail = $"VoiceMeeter did not confirm A1 output '{match.Name}'.";
+        detail = verified is null
+            ? $"VoiceMeeter did not report an A1 output after selecting '{match.Name}'. Check A1 in VoiceMeeter and try again."
+            : $"VoiceMeeter did not confirm A1 output '{match.Name}'.";
         return false;
     }
 
@@ -199,10 +203,10 @@ public sealed class VmConfig
             return false;
         }
 
-        if (_api.TryGetString("Strip[0].device.name", out var current) &&
-            DeviceMatches(current, micName))
+        var currentMic = _api.WaitForString("Strip[0].device.name", 1500);
+        if (currentMic is not null && DeviceMatches(currentMic, micName))
         {
-            detail = $"strip 1 already on {current}";
+            detail = $"strip 1 already on {currentMic}";
             return true;
         }
 
@@ -229,8 +233,8 @@ public sealed class VmConfig
             return false;
         }
 
-        Thread.Sleep(250);
-        if (_api.TryGetString("Strip[0].device.name", out var verify) && DeviceMatches(verify, micName))
+        var verify = _api.WaitForString("Strip[0].device.name", 4000);
+        if (verify is not null && DeviceMatches(verify, micName))
         {
             detail = $"strip 1 → {verify}";
             return true;
@@ -376,8 +380,10 @@ public sealed class VmConfig
             SetAndVerifyFloat("Bus[0].Mute", baseline.A1Mute),
             SetAndVerifyFloat($"Bus[{VmLayout.ForKind(kind).B1Index}].Mute", baseline.B1Mute)
         };
-        var deviceOk = _api.TryGetString("Bus[0].device.name", out var restoredA1) && OutputDeviceMatches(restoredA1, baseline.A1Output) &&
-                       _api.TryGetString("Strip[0].device.name", out var restoredMic) && DeviceMatches(restoredMic, baseline.MicrophoneDevice);
+        var restoredA1 = _api.WaitForString("Bus[0].device.name", 4000);
+        var restoredMic = _api.WaitForString("Strip[0].device.name", 4000);
+        var deviceOk = restoredA1 is not null && OutputDeviceMatches(restoredA1, baseline.A1Output) &&
+                       restoredMic is not null && DeviceMatches(restoredMic, baseline.MicrophoneDevice);
         var allOk = checks.All(ok => ok) && deviceOk;
         result.Add("voicemeeter", allOk, allOk ? "Saved VoiceMeeter input devices, sends, mutes, gains, and monitor output restored." : "One or more VoiceMeeter settings could not be restored and verified.");
         if (allOk)

@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, statSync } from 'fs';
 import path from 'path';
 import type { BackgroundImage } from '@shared/rpc';
+import { VIDEO_EXTENSIONS, wallpaperFileUrl, isAllowedWallpaperFile, resolveWorkshopDir } from './wallpapers';
+export { resolveWorkshopDir } from './wallpapers';
 
 const SUPPORTED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.avif']);
 
@@ -66,7 +68,46 @@ export function loadBackground(filePath: string): BackgroundResult {
   }
 }
 
-export function loadStoredBackground(stored: string | null): BackgroundResult | null {
+/**
+ * Wallpaper Engine videos stream over the wallpaper:// protocol instead of a
+ * data URL. Static Wallpaper Engine stills are exported to a temporary target
+ * under the app's user data folder so they can be loaded like any other image.
+ */
+function loadVideoBackground(filePath: string, workshopDir: string | null): BackgroundResult {
+  const name = path.basename(filePath);
+  const broken = (detail: string): BackgroundResult => ({
+    ok: false,
+    detail,
+    image: { path: filePath, name, url: '', animated: false, broken: true, detail }
+  });
+  if (!filePath || !existsSync(filePath)) {
+    return broken(`That wallpaper file is gone — pick it again. (${filePath || 'no file'})`);
+  }
+  if (!isAllowedWallpaperFile(filePath, workshopDir)) {
+    return broken(`${name} is outside the Wallpaper Engine library.`);
+  }
+  return {
+    ok: true,
+    image: { path: filePath, name, url: wallpaperFileUrl(filePath, workshopDir), animated: true, video: true }
+  };
+}
+
+/**
+ * Load a background that was previously persisted as `backgroundPath`.
+ *
+ * A stored path can be a user-picked image, a Wallpaper Engine video, or a
+ * Wallpaper Engine still that was exported to the user data folder.
+ */
+export async function loadStoredBackground(
+  stored: string | null,
+  workshopDir: string | null = null,
+): Promise<BackgroundResult | null> {
+  const workshopDirVal = workshopDir ?? (await resolveWorkshopDir());
   if (!stored) return null;
+  if (VIDEO_EXTENSIONS.has(path.extname(stored).toLowerCase())) {
+    // Heuristic: a wallpaper:// URL is only valid for files inside the workshop
+    // content folder, so pass the workshop dir so the loader can verify it.
+    return loadVideoBackground(stored, workshopDirVal);
+  }
   return loadBackground(stored);
 }

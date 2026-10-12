@@ -10,9 +10,8 @@ import { disposeUpdater } from './updater';
 
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 
-if (!app.isPackaged) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'vrchat-music-bridge-dev'));
-}
+app.setName('SPOTT Experimental');
+app.setPath('userData', path.join(app.getPath('appData'), app.isPackaged ? 'spott-experimental' : 'spott-experimental-dev'));
 
 const sidecar = new SidecarClient();
 let win: BrowserWindow | null = null;
@@ -46,18 +45,20 @@ const trayCtx = {
 
 function createWindow(): void {
   win = new BrowserWindow({
+    title: 'SPOTT Experimental',
+    icon: path.join(app.getAppPath(), 'build', 'spott.png'),
     width: 1120,
     height: 760,
-    minWidth: 880,
-    minHeight: 600,
-    backgroundColor: '#0f0e14',
+    minWidth: 560,
+    minHeight: 480,
+    backgroundColor: '#080204',
     autoHideMenuBar: true,
     ...(process.platform === 'win32'
       ? {
           titleBarStyle: 'hidden' as const,
           titleBarOverlay: {
-            color: '#0c0e17',
-            symbolColor: '#9aa1b8',
+            color: '#100509',
+            symbolColor: '#ffbf2f',
             height: 61
           }
         }

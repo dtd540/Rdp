@@ -183,8 +183,27 @@ export interface BackgroundImage {
   name: string;
   url: string;
   animated: boolean;
+  /** Wallpaper Engine video wallpapers stream from disk instead of a data URL. */
+  video?: boolean;
   broken?: boolean;
   detail?: string;
+}
+
+/** One wallpaper found in the local Wallpaper Engine library. */
+export interface WallpaperEntry {
+  /** Workshop item id, or the folder name for your own projects. */
+  id: string;
+  source: 'workshop' | 'mine';
+  title: string;
+  /** Raw Wallpaper Engine type: 'video', 'scene', 'web', ... */
+  type: string;
+  /** What SPOTT can show: a playing video, a still/preview image, or nothing. */
+  backgroundKind: 'video' | 'image' | 'none';
+  previewPath: string | null;
+  targetPath: string | null;
+  /** Decorated per environment: wallpaper:// URL in Electron, /wallpaper-file in preview. */
+  previewUrl: string | null;
+  targetUrl: string | null;
 }
 
 export interface BridgeOpResult {
@@ -205,6 +224,7 @@ export interface BridgeOpResult {
   detail?: string;
   phase?: string;
   image?: BackgroundImage;
+  wallpapers?: WallpaperEntry[];
   games?: SteamGame[];
   browserTabs?: Array<{ id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean }>;
 }
